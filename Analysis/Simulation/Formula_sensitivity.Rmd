@@ -1,0 +1,143 @@
+---
+title: "Formula_sensitivity"
+author: "Lucas Avezum"
+date: "April 29, 2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+rm(list = ls())
+getwd()
+knitr::opts_chunk$set(fig.width=6, fig.height=4)  
+
+## Load the libraries we will be using
+library(tidyverse)
+library(scales)
+library(plyr)
+library(gridExtra)
+```
+
+## Introduction
+
+The growing literature on IRB risk-weights focus on the drivers and consequences of average risk-weights dispersion *across* banks. I intend to show that bank-level risk-weight dispersion, i.e., the standard deviation of risk-weight density *within* a bank, also plays a role. The study has two parts. First, I plan to investigate whether bank-level risk-weight dispersion is associated with better capitalization, and higher return on equity. In the second part, I want to uncover which variables explain the variation of bank-level risk-weight dispersion across banks, i.e., why some banks have a risk-weight distribution wider than others. 
+
+## Effects
+
+```{r parameters and data, echo=FALSE, include=FALSE}
+set.seed(123)
+LGD <- 0.2
+M   <- 2.5
+PD  <- seq(0.0001, 0.2, by=0.00001) 
+PD_1 <- rlnorm(length(PD),-4,0.1)
+PD_1[PD_1<0] <- 0.0001
+PD_2 <- rlnorm(length(PD),-4,0.5)
+PD_2[PD_2<0] <- 0.0001
+```
+
+
+```{r formulas, echo=FALSE, include=FALSE}
+mapping <- function(PD,LGD,M){
+  R  <- 0.12*(1-exp(-50*PD))/(1-exp(-50))+0.24*(1-(1-exp(-50*PD))/(1-exp(-50)))
+  b  <- (0.11852-0.05478*log(PD))^2
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(0.999))-PD)*((1-1.5*b)^-1*(1+(M-2.5)*b))
+  RW <- K*12.5
+  data <- data.frame(RW,PD)
+  return(data)
+}
+
+```
+
+
+
+### Why does risk-weight dispersion matters for capitalization and ROE?
+
+According to the IRB framework, banks can use their own estimates of probability of default (PD).^[This is valid for banks approved both under the Foundation-IRB and Advanced-IRB. Banks under the latter approach may also use their own estimates of loss-given-default (LGD) and exposure-at-defualt (EAD).] Risk-weights are then mapped from these estimated PDs according to a pre-determined formula. The figure 1 shows how estimated PDs map into regulatory risk-weights.^[The figure shows the map for loans in the corporate sector, to large firms, assuming a 20% of loss given defaults and loan maturity of 2.5 years. The choice of assumptions does not affect my reasoning.] 
+
+
+```{r, echo=FALSE}
+data.1 <- mapping(PD,LGD,M)
+
+p <- ggplot(data = subset(data.1,subset = PD <1),
+            mapping = aes(x = PD, y=RW)) 
+p + geom_line(alpha = 1) + 
+  labs(x = "PD", 
+         y = "RW",title = "Figure 1:") +
+  theme_bw()
+```
+ 
+
+The concativity of the risk-weight function means that, for a given average PD, an increase in the standard deviation of PD reduces the average risk-weight. Conversely, for a given average RW, greater RW dispersion implies higher average PD. Figure 2 illustrate the last point using simulated data.^[PDs are drawn from log-normal distributions and RW computed using the function shown in figure 1.]
+
+```{r,echo=FALSE}
+data.1 <- mapping(PD_1,LGD,M)
+data.1 <- mutate(data.1,sample=factor("Sample 1"))
+data.2 <- mapping(PD_2,LGD,M)
+data.2 <- mutate(data.2,sample=factor("Sample 2"))
+data <- rbind(data.1, data.2)
+mu <- ddply(data, "sample", summarise, rw.mean=mean(RW),pd.mean=mean(PD))
+d.mu <- ts(mu)
+d.mu <- d.mu/stats::lag(d.mu,-1) - 1
+
+p1 <- ggplot(data = subset(data,subset = PD<0.04),
+            mapping = aes(x = PD, fill = sample, color = sample)) + 
+  geom_density(alpha = 0.3) +
+  geom_vline(data=mu,aes(xintercept = pd.mean,color=sample), linetype="dashed",size=1)+
+  annotate(geom = "text", x = 0.021, y = 200,
+                            label = "12.5% higher",
+                            hjust = 0)+
+  labs(x = "PD",
+         title = "Figure 2:") +
+  theme_classic() + theme(legend.position = "none")
+
+p2 <- ggplot(data = subset(data,subset = RW<0.7 & RW >0.3),
+            mapping = aes(x = RW, fill = sample, color = sample)) + 
+  geom_density(alpha = 0.3) + 
+  geom_vline(data=mu,aes(xintercept = rw.mean,color=sample), linetype="dashed",size=1)+
+  annotate(geom = "text", x = 0.53, y = 25,
+                            label = "0.3% higher",
+                            hjust = 0)+
+  labs(x = "RW") +
+ theme_classic() + theme(legend.position = "none")
+
+grid.arrange(p1, p2, nrow = 1)
+
+```
+
+Hence, by widening their RW density, banks can either reduce their risk-weighted asset and maintain their risk-taking level and/or increase risk-taking without affecting their capital ratios.    
+
+**Hypothesis 1** *Banks with wider risk-weight distribution are better capitalized*
+
+**Hypothesis 2** *Banks with wider risk-weight distribution have higher return on equity*
+
+
+# Empirical strategy
+
+The main analysis relies on the following regressions:\newline
+
+$\text{CAR}_{b,t}=\alpha_0+\alpha_1\widehat{sd(\text{RW})}_{b,t}+\alpha_2\text{Controls}_{b,t}+\varepsilon_{b,t}$,  \newline
+
+$\text{ROE}_{b,t}=\beta_0+\beta_1\widehat{sd(\text{RW})}_{b,t}+\beta_2\text{Controls}_{b,t}+\varepsilon_{b,t}$,  \newline
+
+where the independent variables, $\text{CAR}_{b,t}$ and $\text{ROE}_{b,t}$, are the capital ratio and return on equity of bank $b$ at year $t$, respectively. The variable of interest, $\widehat{sd(\text{RW})}_{b,t}$, captures exogenous changes in risk-weight dispersion and it is obtained as the fitted value for the following first stage regression: \newline
+
+$sd(\text{RW})_{b,t}=\kappa_0+\kappa_1\text{IRB}_{b,t}+\kappa_2\text{Controls}_{b,t}+\varepsilon_{b,t}$,  \newline
+
+$sd(\text{RW})_{b,t}$ is the standard deviation of risk-weight of bank $b$ at time $t$. For the years before IRB approval $sd(\text{RW})_{b,t}$ is close to zero.^[Risk-weights under the standardized approach are flat within an asset class.] After approval we replace this variable by the standard deviation of the IRB risk-weight density. The instrument, $IRB_{b,t}$, is a dummy variable that takes 1 for the periods after bank $b$ is allowed to calculate risk-weights using IRB models.  
+
+
+## Causes and policy 
+After stabilishing the importance of risk-weight dispersion, I focus on the policy implications of this finding.
+
+$\text{sd(RW)}_{b,c,t}=\gamma_0+\gamma_1\text{Regulation}_{c,t}+\gamma_2\text{Bank}_{b,t}+\varepsilon_{b,c,t}$,  \newline
+
+$\text{Regulation}_{c,t}$ is a vector of variables that may include regulatory standards, for instance, from the Barth dataset on bank regulation. $\text{Bank}_{b,t}$ is a vector bank characteristics that may affect the dispersion of risk-weight, such as, NPL ratio, size and diversification. Comparing the economic and statistical significance between $\gamma_1$ and $\gamma_2$ shows to what extent risk-weight dispersion is the unintended result of regulation or specific to banks' strategies and possibilities.\newline
+
+## Data
+
+For this project, I will have to merge the Bankscope dataset to risk-weight information from Pillar-III reports, which we are already collecting.  
+
+
+
