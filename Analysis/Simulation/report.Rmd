@@ -1,0 +1,62 @@
+---
+title: "JMP report"
+author: "Lucas Avezum"
+date: "May 14, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)                                                             ## excel files and,
+library(readxl)                                                            ## load the libraries.
+library(data.table)
+library(foreign)
+library(lubridate)
+library(lfe)
+library(stargazer)
+library(ineq)
+library(DescTools)
+library(gglorenz)
+
+
+```
+```{r, include=FALSE}
+load("../../Data/Temp/Raw_data_2.Rda")
+lc.wholesale <- data %>% filter(Portfolio_lv1 == "Wholesale") 
+lc.wholesale <- Lc(lc.wholesale$PD,lc.wholesale$EAD*lc.wholesale$LGD)
+
+lc.retail <- data %>% filter(Portfolio_lv1 == "Retail") 
+lc.retail <- Lc(lc.retail$PD,lc.retail$EAD*lc.retail$LGD)
+```
+
+
+
+- Average Capital savings using $\hat{P}$ and LGD original distribution: 32.8% 
+
+- Average Gini coefficient $PD$ weighted by $LGD$: 0.67
+
+- Correlation between Gini coefficient and capital savings: 0.79
+
+
+- $\hat{P}=\frac{\sum_i^nEAD_iLGD_iPD_i}{\sum_i^nEAD_iLGD_i}$ \newline
+
+
+```{r lorenz curve, echo=FALSE,}
+plot(lc.wholesale,
+     col="black",
+     type="l",      # !is not working
+     lty=1,
+     lwd=3,
+     main="Lorenz Curve by Portfolio"     
+)
+
+lines(lc.retail, lty=2, lwd=3)
+
+
+legend("topleft",
+       c("Wholesale", "Retail"),
+       lty=c(1,2,3),
+       lwd=3)
+```
+

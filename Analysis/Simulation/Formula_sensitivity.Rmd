@@ -18,126 +18,217 @@ library(tidyverse)
 library(scales)
 library(plyr)
 library(gridExtra)
+library(DescTools)
+library(lfe)
+library(stargazer)
 ```
 
-## Introduction
 
-The growing literature on IRB risk-weights focus on the drivers and consequences of average risk-weights dispersion *across* banks. I intend to show that bank-level risk-weight dispersion, i.e., the standard deviation of risk-weight density *within* a bank, also plays a role. The study has two parts. First, I plan to investigate whether bank-level risk-weight dispersion is associated with better capitalization, and higher return on equity. In the second part, I want to uncover which variables explain the variation of bank-level risk-weight dispersion across banks, i.e., why some banks have a risk-weight distribution wider than others. 
 
-## Effects
+
 
 ```{r parameters and data, echo=FALSE, include=FALSE}
 set.seed(123)
 LGD <- 0.2
 M   <- 2.5
-PD  <- seq(0.0001, 0.2, by=0.00001) 
-PD_1 <- rlnorm(length(PD),-4,0.1)
+grid  <- seq(0.0001, 1, by=0.00001) 
+grid_2  <- seq(0, 10, by=0.01) 
+PD_1 <- rlnorm(length(grid),-4,0.1)
 PD_1[PD_1<0] <- 0.0001
-PD_2 <- rlnorm(length(PD),-4,0.5)
+PD_1_avg <- mean(PD_1)
+PD_1_sd <- sd(PD_1)
+PD_2 <- rlnorm(length(grid),-4,0.5)
 PD_2[PD_2<0] <- 0.0001
+PD_2[PD_2>0.9999] <- 0.9999
+PD_2_avg <- mean(PD_2)
+PD_2_sd <- sd(PD_2)
 ```
 
 
 ```{r formulas, echo=FALSE, include=FALSE}
-mapping <- function(PD,LGD,M){
+mapping_wholesale <- function(PD,LGD,M,alpha,portfolio){
   R  <- 0.12*(1-exp(-50*PD))/(1-exp(-50))+0.24*(1-(1-exp(-50*PD))/(1-exp(-50)))
   b  <- (0.11852-0.05478*log(PD))^2
-  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(0.999))-PD)*((1-1.5*b)^-1*(1+(M-2.5)*b))
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)*((1-1.5*b)^-1*(1+(M-2.5)*b))
   RW <- K*12.5
-  data <- data.frame(RW,PD)
+  data <- data.frame(K,RW,PD,LGD,M,R,portfolio)
   return(data)
 }
 
+mapping_retail <- function(PD,LGD,R,alpha,portfolio){
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)
+  RW <- K*12.5
+  data <- data.frame(K,RW,PD,LGD,M,R,portfolio)
+  return(data)
+}
+
+mapping_other_retail <- function(PD,LGD,alpha,portfolio){
+  R  <- 0.03*(1-exp(-35*PD))/(1-exp(-35))+0.16*(1-(1-exp(-35*PD))/(1-exp(-35)))
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)
+  RW <- K*12.5
+  data <- data.frame(K,RW,PD,LGD,R,portfolio)
+  return(data)
+}
 ```
 
 
 
-### Why does risk-weight dispersion matters for capitalization and ROE?
-
-According to the IRB framework, banks can use their own estimates of probability of default (PD).^[This is valid for banks approved both under the Foundation-IRB and Advanced-IRB. Banks under the latter approach may also use their own estimates of loss-given-default (LGD) and exposure-at-defualt (EAD).] Risk-weights are then mapped from these estimated PDs according to a pre-determined formula. The figure 1 shows how estimated PDs map into regulatory risk-weights.^[The figure shows the map for loans in the corporate sector, to large firms, assuming a 20% of loss given defaults and loan maturity of 2.5 years. The choice of assumptions does not affect my reasoning.] 
 
 
-```{r, echo=FALSE}
-data.1 <- mapping(PD,LGD,M)
+```{r wholesale vs retail, echo=FALSE}
+data <- mapping_wholesale(grid,0.45,2.5,0.999,factor("Corporate"))
+data <- rbind(data,mapping_retail(grid,0.45,0.15,0.999,factor("Mortgage")))
 
-p <- ggplot(data = subset(data.1,subset = PD <1),
-            mapping = aes(x = PD, y=RW)) 
+
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K, colour = portfolio)) 
 p + geom_line(alpha = 1) + 
   labs(x = "PD", 
-         y = "RW",title = "Figure 1:") +
+         y = "Capital requirement per unit of exposure",title = "Figure 1: Wholesale vs Retail") +
   theme_bw()
 ```
  
+```{r LGD sensitivity, echo=FALSE}
+data <- mapping_wholesale(grid,0.4,2.5,0.999,factor("LGD = 40%"))
+data <- rbind(data,mapping_wholesale(grid,0.45,2.5,0.999,factor("LGD = 45%")))
+data <- rbind(data,mapping_wholesale(grid,0.5,2.5,0.999,factor("LGD = 50%")))
 
-The concativity of the risk-weight function means that, for a given average PD, an increase in the standard deviation of PD reduces the average risk-weight. Conversely, for a given average RW, greater RW dispersion implies higher average PD. Figure 2 illustrate the last point using simulated data.^[PDs are drawn from log-normal distributions and RW computed using the function shown in figure 1.]
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K, colour = portfolio)) 
+p + geom_line(alpha = 1) + 
+  labs(x = "PD", 
+         y = "Capital requirement per unit of exposure",title = "Figure 2: PD mapping") +
+  theme_bw()
+```
+```{r M sensitivity, echo=FALSE}
+data <- mapping_wholesale(grid,0.1,0,0.999,factor("M = 0 year"))
+data <- rbind(data,mapping_wholesale(grid,0.1,2.5,0.999,factor("M = 2.5 years")))
+data <- rbind(data,mapping_wholesale(grid,0.1,5,0.999,factor("M = 5 years")))
 
-```{r,echo=FALSE}
-data.1 <- mapping(PD_1,LGD,M)
-data.1 <- mutate(data.1,sample=factor("Sample 1"))
-data.2 <- mapping(PD_2,LGD,M)
-data.2 <- mutate(data.2,sample=factor("Sample 2"))
-data <- rbind(data.1, data.2)
-mu <- ddply(data, "sample", summarise, rw.mean=mean(RW),pd.mean=mean(PD))
-d.mu <- ts(mu)
-d.mu <- d.mu/stats::lag(d.mu,-1) - 1
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K, colour = portfolio)) 
+p + geom_line(alpha = 1) + 
+  labs(x = "PD", 
+         y = "Capital requirement per unit of exposure",title = "Figure 3: PD mapping") +
+  theme_bw()
+```
 
-p1 <- ggplot(data = subset(data,subset = PD<0.04),
-            mapping = aes(x = PD, fill = sample, color = sample)) + 
-  geom_density(alpha = 0.3) +
-  geom_vline(data=mu,aes(xintercept = pd.mean,color=sample), linetype="dashed",size=1)+
-  annotate(geom = "text", x = 0.021, y = 200,
-                            label = "12.5% higher",
-                            hjust = 0)+
-  labs(x = "PD",
-         title = "Figure 2:") +
-  theme_classic() + theme(legend.position = "none")
+```{r LGD_mapping, echo=FALSE}
+data <- mapping_wholesale(0.01,grid,2.5,0.999,factor("PD = 1%"))
+data <- rbind(data,mapping_wholesale(0.05,grid,2.5,0.999,factor("PD = 5%")))
+data <- rbind(data,mapping_wholesale(0.1,grid,2.5,0.999,factor("PD = 10%")))
 
-p2 <- ggplot(data = subset(data,subset = RW<0.7 & RW >0.3),
-            mapping = aes(x = RW, fill = sample, color = sample)) + 
-  geom_density(alpha = 0.3) + 
-  geom_vline(data=mu,aes(xintercept = rw.mean,color=sample), linetype="dashed",size=1)+
-  annotate(geom = "text", x = 0.53, y = 25,
-                            label = "0.3% higher",
-                            hjust = 0)+
-  labs(x = "RW") +
- theme_classic() + theme(legend.position = "none")
+p <- ggplot(data = subset(data,subset = PD <1),
+            mapping = aes(x = LGD, y=K, colour = portfolio)) 
+p + geom_line(alpha = 1) + 
+  labs(x = "LGD", 
+         y = "Capital requirement per unit of exposure",title = "Figure 4: LGD mapping") +
+  theme_bw()
+```
 
-grid.arrange(p1, p2, nrow = 1)
+```{r M_mapping, echo=FALSE}
+data <- mapping_wholesale(0.01,0.45,grid_2,0.999,factor("PD = 1%"))
+data <- rbind(data,mapping_wholesale(0.05,0.45,grid_2,0.999,factor("PD = 5%")))
+data <- rbind(data,mapping_wholesale(0.1,0.45,grid_2,0.999,factor("PD = 10%")))
+
+p <- ggplot(data = data,
+            mapping = aes(x = M, y=K, colour = portfolio)) 
+p + geom_line(alpha = 1) + 
+  labs(x = "Maturity", 
+         y = "Capital requirement per unit of exposure",title = "Figure 5: Maturity mapping") +
+  theme_bw()
+```
+
+
+
+
+```{r savings simulation, echo=FALSE,include=FALSE}
+
+K_bar <- 99991*mapping_wholesale(mean(PD_1),0.45,2.5,0.999,factor("Average PD"))["K"]
+K_i <- mapping_wholesale(PD_1,0.45,2.5,0.999,factor("PD distribution"))
+new <- summarise(K_i,EAD = Freq(K))
+K_total <- K_i  %>%
+  group_by(portfolio) %>% 
+  summarise_all(sum)
+
+print(K_bar-K_total["K"])
+print(K_total["K"]/K_bar-1)
+
+K_bar <- 99991*mapping_wholesale(mean(PD_2),0.45,2.5,0.999,factor("Average PD"))["K"]
+K_i <- mapping_wholesale(PD_2,0.45,2.5,0.999,factor("PD distribution"))
+K_total <- K_i  %>%
+  group_by(portfolio) %>% 
+  summarise_all(sum)
+
+print(K_bar-K_total["K"])
+print(K_total["K"]/K_bar-1)
+
+
+K_bar <- 99991*mapping_wholesale(mean(PD_2),0.55,2.5,0.999,factor("Average PD"))["K"]
+K_i <- mapping_wholesale(PD_2,0.55,2.5,0.999,factor("PD distribution"))
+K_total <- K_i  %>%
+  group_by(portfolio) %>% 
+  summarise_all(sum)
+
+print(K_bar-K_total["K"])
+print(K_total["K"]/K_bar-1)
+
+K_bar <- 99991*mapping_wholesale(mean(PD_2),0.45,0,0.999,factor("Average PD"))["K"]
+K_i <- mapping_wholesale(PD_2,0.45,0,0.999,factor("PD distribution"))
+K_total <- K_i  %>%
+  group_by(portfolio) %>% 
+  summarise_all(sum)
+
+print(K_bar-K_total["K"])
+print(K_total["K"]/K_bar-1)
 
 ```
 
-Hence, by widening their RW density, banks can either reduce their risk-weighted asset and maintain their risk-taking level and/or increase risk-taking without affecting their capital ratios.    
-
-**Hypothesis 1** *Banks with wider risk-weight distribution are better capitalized*
-
-**Hypothesis 2** *Banks with wider risk-weight distribution have higher return on equity*
 
 
-# Empirical strategy
+```{r PD LGD correlation, echo=FALSE}
+load("../../Data/Temp/PD_LGD_correlation.Rda")
 
-The main analysis relies on the following regressions:\newline
+reg.hdfe1 <- felm(LGD~ PD | Portfolio+Bank|0|0,
+                  data = subset(data,subset = PD<1))
+robust.hdfe1 <- summary(reg.hdfe1,robust=TRUE)$coefficients[,2]
 
-$\text{CAR}_{b,t}=\alpha_0+\alpha_1\widehat{sd(\text{RW})}_{b,t}+\alpha_2\text{Controls}_{b,t}+\varepsilon_{b,t}$,  \newline
+reg.hdfe2 <- felm(LGD~ PD | Bank|0|0,
+                  data = subset(data,subset = PD<1 & Portfolio == "Real estate"))
+robust.hdfe2 <- summary(reg.hdfe2,robust=TRUE)$coefficients[,2]
 
-$\text{ROE}_{b,t}=\beta_0+\beta_1\widehat{sd(\text{RW})}_{b,t}+\beta_2\text{Controls}_{b,t}+\varepsilon_{b,t}$,  \newline
+reg.hdfe3 <- felm(LGD~ PD | Bank|0|0,
+                  data = subset(data,subset = PD<1 & Portfolio == "Qualifying revolving" ))
+robust.hdfe3 <- summary(reg.hdfe3,robust=TRUE)$coefficients[,2]
 
-where the independent variables, $\text{CAR}_{b,t}$ and $\text{ROE}_{b,t}$, are the capital ratio and return on equity of bank $b$ at year $t$, respectively. The variable of interest, $\widehat{sd(\text{RW})}_{b,t}$, captures exogenous changes in risk-weight dispersion and it is obtained as the fitted value for the following first stage regression: \newline
+reg.hdfe4 <- felm(LGD~ PD |  Bank|0|0,
+                  data = subset(data,subset = PD<1 & Portfolio == "Other retail"))
+robust.hdfe4 <- summary(reg.hdfe4,robust=TRUE)$coefficients[,2]
 
-$sd(\text{RW})_{b,t}=\kappa_0+\kappa_1\text{IRB}_{b,t}+\kappa_2\text{Controls}_{b,t}+\varepsilon_{b,t}$,  \newline
+reg.hdfe5 <- felm(LGD~ PD |  Bank|0|0,
+                  data = subset(data,subset = PD<1 & Portfolio == "Corporate"))
+robust.hdfe5 <- summary(reg.hdfe5,robust=TRUE)$coefficients[,2]
 
-$sd(\text{RW})_{b,t}$ is the standard deviation of risk-weight of bank $b$ at time $t$. For the years before IRB approval $sd(\text{RW})_{b,t}$ is close to zero.^[Risk-weights under the standardized approach are flat within an asset class.] After approval we replace this variable by the standard deviation of the IRB risk-weight density. The instrument, $IRB_{b,t}$, is a dummy variable that takes 1 for the periods after bank $b$ is allowed to calculate risk-weights using IRB models.  
+reg.hdfe6 <- felm(LGD~ PD |  Bank|0|0,
+                  data = subset(data,subset = PD<1 & Portfolio == "Banks"))
+robust.hdfe6 <- summary(reg.hdfe6,robust=TRUE)$coefficients[,2]
 
+reg.hdfe7 <- felm(LGD~ PD |  Bank|0|0,
+                  data = subset(data,subset = PD<1 & Portfolio == "Sovereign"))
+robust.hdfe7 <- summary(reg.hdfe7,robust=TRUE)$coefficients[,2]
+```
+```{r PD LGD table, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
 
-## Causes and policy 
-After stabilishing the importance of risk-weight dispersion, I focus on the policy implications of this finding.
+stargazer(reg.hdfe1,reg.hdfe2,reg.hdfe3,reg.hdfe4,reg.hdfe5,reg.hdfe6,reg.hdfe7,
+          header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small", 
+          label = "",
+          style = "qje", 
+          column.labels   = c("All", "Real estate","Credit cards", "Other retail","Corporates","Banks","Sovereign"),
+          dep.var.labels = c("LGD"), column.sep.width = "2pt",
+          add.lines = list(c("Portfolio FE", "Yes", "-","-","-","-","-","-"),
+                           c("Bank FE","Yes", "Yes","Yes","Yes","Yes","Yes","Yes")))
 
-$\text{sd(RW)}_{b,c,t}=\gamma_0+\gamma_1\text{Regulation}_{c,t}+\gamma_2\text{Bank}_{b,t}+\varepsilon_{b,c,t}$,  \newline
-
-$\text{Regulation}_{c,t}$ is a vector of variables that may include regulatory standards, for instance, from the Barth dataset on bank regulation. $\text{Bank}_{b,t}$ is a vector bank characteristics that may affect the dispersion of risk-weight, such as, NPL ratio, size and diversification. Comparing the economic and statistical significance between $\gamma_1$ and $\gamma_2$ shows to what extent risk-weight dispersion is the unintended result of regulation or specific to banks' strategies and possibilities.\newline
-
-## Data
-
-For this project, I will have to merge the Bankscope dataset to risk-weight information from Pillar-III reports, which we are already collecting.  
-
-
+```          
+          
+      
 
