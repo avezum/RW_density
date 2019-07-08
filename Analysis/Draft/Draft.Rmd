@@ -1,0 +1,451 @@
+---
+title: "Distribution of portfolio credit risk and capital savings"
+author:
+- affiliation: Tilburg University; l.avezum@uvt.nl
+  name: Lucas Avezum
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    citation_package: natbib
+    latex_engine: pdflatex
+    template: tex-ms.tex
+  html_document:
+    df_print: paged
+  word_document: default
+bibliography: null
+citecolor: null
+anonymous: no
+fontsize: 12pt
+geometry: margin= 1in
+keywords: Key1, Key2, Key3
+linkcolor: blue
+biblio-style: apsr
+subtitle: ''
+thanks: Very preliminary draft
+abstract: 'In this paper, I study the possibility, allowed by regulation, for banks
+  to increase their capital ratio while maintaning the average portfolio riskiness. Basel II introduced
+  a concave mapping from probabilities of default to capital requiremets. As a consequence,
+  banks can reduce requirements or increase risk-taking by widening their portfolio
+  credit risk distribution.'
+toc: no
+urlcolor: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo      = FALSE, 
+                      warning   = FALSE, 
+                      error     = FALSE, 
+                      tidy      = TRUE, 
+                      tidy.opts = list(width.cutoff=50), 
+                      collapse  = TRUE,
+                      warning   = FALSE,
+                      error     = FALSE,
+                      message   = FALSE, 
+                      comment   = "",
+                      cache     = TRUE)
+# These options are tuned for manuscript/presentation. 
+# They basically run R in the background except for spitting out figures/tables
+# They also cache results so that you don't have to run your whole analysis every time you fix a typo
+
+rm(list = ls()) 
+
+library(tidyverse)           ## Data manipulation, pipe operator
+library(splitstackshape)     ## Command to expand data
+library(data.table)          ## Command to bind lists
+library(ggridges)            ## Density ridges plot
+library(stargazer)           ## Latex tables
+library(lfe)                 ## High-dimensional fixed effects
+library(gridExtra)           ## Plot side-by-side
+library(DescTools)           ## Command to winsorize variables
+
+p_w <- c(0.0, 1)
+```
+
+```{r load data, include=FALSE}
+load("../../Data/Datasets/Pillar3Data.Rda")
+load("../../Data/Datasets/BankData.Rda")
+
+# Expand Pillar-III data frame to plot densities and lorenz curves
+expanded.list <- list()
+for(i in c("EAD","EL")) {
+  expanded.list[[i]] <- pillar3.data %>%
+  filter(Method2 %in% c("IRB")) %>%
+  select(name,Country,Method,Portfolio_1,EAD,LGD,PD,year)%>%
+  mutate(EL  = round(EAD*LGD/1000),
+         EAD = round(EAD/1000))%>%
+    na.omit(cols=c(i))%>%
+    expandRows(i) %>%
+    mutate(freq_type = as.factor(i))
+}
+pillar3.expanded <-  rbindlist(expanded.list, use.names=TRUE,fill = TRUE)
+
+# Aggregate Pillar-III data by bank and merge to bankscope
+bank.data <- pillar3.data %>% 
+  group_by(name,bvdid,Country,year) %>%
+  mutate(weight=EAD*LGD)%>%
+  filter(weight>0,
+         PD<1&PD>0,
+         Portfolio_1 %in% c("Wholesale","Retail"), 
+         Method2 %in% c("IRB"))%>%
+  dplyr::summarize(gini             = DescTools::Gini(PD,weight),
+                   PD_sd            = sd(PD)*100,
+                   PD_mean          = mean(PD)*100,
+                   K_calculated     = sum(K_calculated),
+                   K_original       = sum(K_original),
+                   K_counterfactual = sum(K_counterfactual)) %>%
+  ungroup()%>% 
+  left_join(bank.data,by=c("bvdid","year"))%>%
+group_by(bvdid) %>% 
+  mutate(savings_log  = log(K_counterfactual-K_calculated),
+         Total.assets = Total.assets/10^6,
+         Total.Capital= Total.Capital/10^6,
+         Tier.1.Capital=Tier.1.Capital/10^6,
+         asset_log    = log(Total.assets),
+         capital_log  = log(Total.Capital),
+         tier.1_log   = log(Tier.1.Capital),
+         savings_rate = (K_counterfactual-K_calculated)/K_calculated,
+         savings_alt  = (K_counterfactual-K_original)/K_original,
+         error        = (K_calculated - K_original)/K_original,
+         asset_d      = Winsorize(log(Total.assets)-lag(log(Total.assets),order_by=year), 
+                                    probs = p_w ,na.rm = TRUE),
+         capital_d    = Winsorize(log(Total.Capital)-lag(log(Total.Capital),order_by=year), 
+                                    probs = p_w ,na.rm = TRUE),
+         PD_mean_d    = Winsorize(PD_mean-lag(PD_mean,order_by=year), 
+                                    probs = p_w ,na.rm = TRUE),
+         savings_d    = Winsorize(savings_log-lag(savings_log,order_by=year), 
+                                    probs = p_w ,na.rm = TRUE),
+         car_d  = Winsorize(Total.Capital.Ratio/100-lag(Total.Capital.Ratio/100,order_by=year), 
+                                    probs = p_w ,na.rm = TRUE),
+         roe_d  = Winsorize(ROE.using.P.L.before.tax..../100-lag(ROE.using.P.L.before.tax..../100,order_by=year),
+                                    probs = p_w ,na.rm = TRUE)) %>%
+  ungroup()
+  
+# Aggregate Pillar-III data by Portfolio
+portfolio.data <- pillar3.data %>% 
+  group_by(Country,Bank,year,Portfolio_1,Portfolio_2) %>%
+  mutate(weight=EAD*LGD)%>%
+  filter(weight>0, Portfolio_1 %in% c("Wholesale","Retail"))%>%
+  dplyr::summarize(gini             = DescTools::Gini(PD,weight),
+                   K_calculated     = sum(K_calculated),
+                   K_counterfactual = sum(K_counterfactual)) %>%
+  mutate(savings = (K_counterfactual-K_calculated)/K_counterfactual)
+
+
+```
+# Introduction
+
+
+
+# Hypotheses and Data
+In this section I describe the hypotheses of the paper by explaining the Basel II regulatory formulae under the IRB approach to calculate RWA for credit risk. 
+
+
+
+
+
+## Capital savings measure
+
+In this section I describe the chosen method to measure differences in risk distributions:
+
+\begin{equation}
+\text{Capital savings}_{i}= f(\overline{PD})\sum_{i}EAD_iLGD_i-\sum_{i}EAD_iLGD_if(PD_i),
+\end{equation}
+
+where $i$ is one asset of the portfolio, $f()$ is the regulatory formula and, 
+
+\begin{equation}
+\overline{PD}=\frac{\sum_iEAD_iLGD_iPD_i}{\sum_iEAD_iLGD_i}.
+\end{equation}
+
+
+## Data
+
+
+
+Figure 1 shows that the log of _Capital savings_ varies considerably across banks. While most canadian banks seem to have not explore this possilibity to save capital, the european banks in our sample appear to have more than halved their capital requirement due to the distribution mechanism. Importantly, this comparison does not means that european banks are riskier than their canadian counterparties but only that their credit risk distribution is more disperse. The figure also shows that there capital savings have changed in time. However, the figure is not appropriated to see how this variable evolved in time.
+
+```{r}
+fig1_cap = "The figure plots the log of banks capital savings. This measure is calculated using equation 1. Each point in the plot is a bank-year observation."
+```
+
+```{r 1, fig.height = 4, fig.width = 5,results="hide",fig.cap= fig1_cap,fig.align = 'center'}
+bank.data %>% 
+ ggplot(mapping = aes(x = reorder(name, savings_rate,FUN = median, na.rm=TRUE),
+                          y = savings_rate,
+                          color = Country,
+                          fill = Country)) +
+geom_point(alpha = 0.5,size = 2) +
+    labs(x=NULL) +
+    coord_flip() +
+  labs(y =  "Capital savings") +
+  
+  theme_bw()
+
+```
+
+
+
+Figure 2 shows that both _Capital savings_ and total capital ratio have increased slighly on average in time. After a spike in 2010, the average return on equity appears to have remained constant in time. 
+
+```{r}
+fig2_cap = "The figure plots the evolution in time of Capital savings, Tier 1 capital ratio and, ROE. The solid line is the average across banks for each year. The first and third quartiles are shown in the gray area.  "
+```
+
+```{r, fig.height = 3, fig.width = 7, results="hide",fig.cap= fig2_cap,out.width = "1\\textwidth"}
+mean_cl_quantile <- function(x, q = c(0.25, 0.75), na.rm = TRUE){
+  dat <- data.frame(y = mean(x, na.rm = TRUE),
+                    ymin = quantile(x, probs = q[1], na.rm = na.rm),
+                    ymax = quantile(x, probs = q[2], na.rm = na.rm))
+  return(dat)
+}
+
+plot1 <- bank.data %>% 
+  mutate(time = lubridate::ymd(year, truncated = 2L))%>%
+ggplot(aes(x=time)) +
+ geom_smooth(aes( y=savings_log, color = savings_log),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
+labs(x="",y="",
+     title = 'Capital savings') +
+  theme_bw()
+
+plot2 <- bank.data %>% mutate(Tier.1.Ratio= Tier.1.Ratio/100) %>%
+  mutate(time = lubridate::ymd(year, truncated = 2L))%>%
+ggplot(aes(x=time)) +
+   geom_smooth(aes(y=Tier.1.Ratio, color = Tier.1.Ratio ),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
+labs(x="",y="",
+     title = 'Total capital ratio') +
+  theme_bw()
+
+plot3 <- bank.data %>% mutate(ROE.using.P.L.before.tax....= ROE.using.P.L.before.tax..../100) %>%
+  mutate(time = lubridate::ymd(year, truncated = 2L))%>%
+ggplot(aes(x=time)) +
+   geom_smooth(aes(y=ROE.using.P.L.before.tax...., color = ROE.using.P.L.before.tax....),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
+labs(x="",y="",
+     title = 'ROE') +
+  theme_bw()
+
+grid.arrange(plot1, plot2, plot3, ncol=3)
+```
+
+
+Figure 3 shows the linear relationship between our variable of interest, _Capital savings_ and three potential outcome variables: core tier 1 capital ratio, return on equity and, a measure of riskness, Z-score.
+
+
+
+```{r}
+fig3_cap = "PD distribution by bank. The figure shows smoothed PD distributions for each bank in our data. Banks are ranked by median PD and colored by host-country"
+```
+
+
+```{r, fig.height = 10, fig.width = 7, include=FALSE, results="hide",fig.cap= fig3_cap,out.width = "1\\textwidth"}
+pillar3.expanded %>% 
+  filter( !is.na(PD),PD<100, freq_type%in%c("EL") ) %>% 
+ggplot(aes(x = PD, y = reorder(name, PD,FUN = median, na.rm=TRUE),color=Country,fill=Country)) +
+  stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.6,
+                       scale = 2 , from = 0, to = 0.05) +
+  scale_x_continuous(expand = c(0.01, 0),labels = scales::percent) +
+  scale_y_discrete(expand = c(0.01, 0)) +
+  labs(
+    x = 'Probability of default') +
+  theme_ridges(font_size = 13, grid = TRUE) + 
+  theme(axis.title.y = element_blank())
+```
+
+
+
+Finally, we supplement the pillar-3 report data with annual information on banks' balance sheets obtained from the Bureau van Dijk's BankFocus database. Table 1 show summary statistics of the final dataset. The sample includes 25 banks. We restrict the analysis to banks for which we are able to collect information from Pillar-III reports. 
+
+The current geographical composition of the sample is: 1 norwegian, 1 italian, 1 spanish, 2 british, 4 australian, 6 canadian, and 10 american banks. The target geographical composition is: 1 norwegian, 1 austrian, 2 finish, 3 belgium, 3 danish, 4 italian, 4 spanish banks, 4 dutch, 4 australian, 4 swedish, 5 french, 5 british, 6 canadian, 7 german, and 10 american banks. This sums up to 63 IRB banks. The selection criteria is asset size.
+
+```{r}
+fig1_cap = "The figure plots the linear relationship between the capital savings measure and,in descending order, the tier 1 capital ratio, the return on equity using PL before taxes, and the Z-score. In each graph, a point is the average across time for each bank."
+```
+
+```{r relation, fig.height = 3, fig.width = 6, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
+plot1 <- bank.data %>% group_by(name)%>%
+  summarise_if(is.numeric,funs(mean),na.rm=TRUE)%>%
+ ggplot(mapping = aes(x = savings_log,
+                      y = Tier.1.Ratio)) +
+geom_point( alpha = 0.5,size = 1) +
+  labs(x="Capital savings",y="CT1 capital ratio") +
+  geom_smooth(method = "lm",color="black") +
+  theme_bw()
+
+plot2 <- bank.data %>% group_by(name)%>%
+  summarise_if(is.numeric,funs(mean),na.rm=TRUE)%>%
+ ggplot(mapping = aes(x = savings_log,
+                      y = ROE.using.P.L.before.tax....)) +
+geom_point( alpha = 0.5,size = 1) +
+  labs(x="Capital savings",y="ROE") +
+  geom_smooth(method = "lm",color="black") +
+  theme_bw()
+
+plot3 <- bank.data %>% group_by(name)%>%
+  summarise_if(is.numeric,funs(mean),na.rm=TRUE)%>%
+ ggplot(mapping = aes(x = savings_log,
+                      y = `Z-score`)) +
+geom_point( alpha = 0.5,size = 1) +
+  labs(x="Capital savings",y="Z-score") +
+  geom_smooth(method = "lm",color="black") +
+  theme_bw()
+
+grid.arrange(plot1, plot2,plot3, ncol=3)
+
+```
+Banks that only implement the standardized approach (SA) for credit risk most of the sample period will also be included in the dataset. The current geographical composition of SA banks is: 1 portuguese, 1 dutch, 1 belgium, 1 finish, 1 hungarian, 2 maltese, 2 british, 2 greek, 2 polish, 3 french, 3 slovenian, 4 cypriot, 5 german, 5 italian, 8 spanish, 37 american. This sums up to 78 SA banks. The selection criteria is the same, asset size.    
+
+
+
+```{r summary, fig.height = 10, fig.width = 7, results="asis",out.width = "1\\textwidth"}
+bank.data %>% 
+  subset(select = c("savings_log","PD_mean","gini","Tier.1.Ratio","ROE.using.P.L.before.tax....","Z-score","asset_log","tier.1_log")) %>%
+  as.data.frame() %>% 
+stargazer(header = FALSE, type="latex", single.row = TRUE, column.sep.width = "1pt", font.size = "small",
+          omit.summary.stat = c("p25","p75"),
+          covariate.labels = c("log Savings","Portfolio mean PD","Gini coefficient","CT1 ratio","ROE","Z-score", "log Total asset","log CT1 capital"),
+          title = "Summary statistics",
+          table.layout = "n=d#-t-as-",
+          notes = "\\parbox[t]{11cm}{The table shows summary statistics for the sample of banks collected. Capital savings, Portfolio mean PD and, Gini coefficient were calculated using the collected information from Pillar-3 reports. The remaining variables come from BankFocus.}", 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE)
+``` 
+
+
+
+# Empirical strategy
+In this section I briefly describe the empirical strategy of the paper.
+ 
+## EBA capital exercise and the effect on capital savings 
+
+To find out if banks adjust their portfolio risk distribution in response to capital requirement shock, I intend to explore the 2011 EBA capital exercise. This was a strong and unexpected test to the solvency of 63 european banks that resulted in a recommendation for these banks to build up their capital buffert to reach a 9.0% core tier 1 capital ratio by June 2012. Identification of the effect of higher capital requirements on banks'portfolio risk distribution comes from comparing the change in the _Capital savings_ measure (or other measure of the distribution such as the Gini coefficient) around the exercise between banks that participated in the exercise and banks that did not. In particular, I (will) estimate the following specification::  
+
+\begin{equation}
+\Delta\text{Capital savings}_{i}= \beta\text{CEB}_{i} + \varepsilon_{i},
+\end{equation}
+
+where $\text{CEB}_{i}$ is an indicator function that equals one if bank $i$ was included in the exercise and $\beta$ is the treatment effect of higher requirements on portfolio risk distribution. 
+
+##  Basel II and the effect of capital savings
+
+Once we know that banks adjust their portolio risk distribution to achieve regulatory capital requirements, an natural extension is to quantify the effect of these changes on capital ratio and evaluate if these changes impact other variables of interest, for instance, return on equity and risk-taking. Endogeneity is an important issue to consider. For instance, worse capitalized banks have a stronger incentive to adjust their portfolios compared to their better capitalized peers resulting in downward biased estimates. Conversely, better-capitalized banks may have more leeway to achieve a portfolio distribution that maximizes return by increasing risk-taking. In this case the estimated effects of capital savings on return on equity and risk-taking will have a positive bias.
+
+To solve the endogeneity concerns and estimate the causal effect of portfolio risk distribution, I (will) explore the time differences in introduction of Basel II across countries. Only after Basel II that the IRB models were allowed to be used and, consequently, the distribution of PD matter for the calculation of RWA. In particular, I (will) estimate the following specification:
+
+\begin{equation}
+Y_{it}= \beta\widehat{\text{Capital savings}}_{it}+\varepsilon_{i},
+\end{equation}
+
+where $Y_{it} \in \{\text{CT1 ratio},\text{ROE},\text{Z-score}\}$ and $\widehat{\text{Capital savings}}_{it}$ is the fitted values of the first stage equation:
+
+\begin{equation}
+\text{Capital savings}_{it}= \alpha\text{Basel II}_{it}+\epsilon_{i},
+\end{equation}
+
+where $\text{Basel II}_{it}$ is an indicator function that equals one if bank $i$ in year $t$ is hosted in country that has adopted Basel II and has its own IRB model approved.
+
+
+# (Preliminary) Results
+
+
+
+```{r, echo=FALSE}
+
+reg.hdfe1 <- felm(Tier.1.Ratio  ~ savings_log  | 0  |0|0,
+                  data = bank.data)
+
+reg.hdfe1.1 <- felm(Tier.1.Ratio  ~ savings_log + asset_log + tier.1_log +PD_mean | 0  |0|0,
+                  data = bank.data)
+
+reg.hdfe1.2 <- felm(Tier.1.Ratio  ~ savings_log + asset_log + tier.1_log +PD_mean | year +name  |0|0,
+                  data = bank.data)
+
+reg.hdfe2 <- felm(ROE.using.P.L.before.tax....~ savings_log  | 0 |0|0,
+                  data = bank.data)
+reg.hdfe2.1 <- felm(ROE.using.P.L.before.tax....~ savings_log + asset_log + tier.1_log +PD_mean | 0 |0|0,
+                  data = bank.data)
+reg.hdfe2.2 <- felm(ROE.using.P.L.before.tax....~ savings_log + asset_log + tier.1_log +PD_mean | year +name |0|0,
+                  data = bank.data)
+
+reg.hdfe3 <- felm(`Z-score`~ savings_log  | 0 |0|0,
+                  data = bank.data)
+reg.hdfe3.1 <- felm(`Z-score`~ savings_log + asset_log + tier.1_log +PD_mean | 0 |0|0,
+                  data = bank.data)
+reg.hdfe3.2 <- felm(`Z-score`~ savings_log + asset_log + tier.1_log +PD_mean | year+Country |0|0,
+                  data = bank.data)
+
+
+```
+
+
+```{r, fig.height = 10, fig.width = 7, results="asis", out.width = "1\\textwidth", cache = FALSE, warning=FALSE, message=FALSE}
+
+stargazer(reg.hdfe1,reg.hdfe1.1,reg.hdfe1.2,
+          header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "Capital Savings and Capital Requirement Ratio",
+          table.layout = "n=d#-t-as-",
+          notes = "\\parbox[t]{10cm}{The table shows the relationship between the measure of capital savings and risk-weighted capital ratio. The dependent variable in each regression is the Core Tier 1 ratio. In column (2) and (3) I control for asset size, tier one capital size, and mean PD. In regressions (3) I also include bank and year fixed effects.}", 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          dep.var.labels = c("CT1 ratio"), column.sep.width = "2pt",
+          covariate.labels = c("log Savings", "log Total asset","log CT1 capital","Portfolio mean PD"),
+          add.lines = list(c("Year FE", "No", "No","Yes"),
+                           c("Bank FE","No", "No","Yes")))
+
+
+
+```   
+
+
+```{r, fig.height = 10, fig.width = 7, results="asis", out.width = "1\\textwidth", cache = FALSE, warning=FALSE, message=FALSE}
+
+stargazer(reg.hdfe2,reg.hdfe2.1,reg.hdfe2.2,
+          header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small", 
+          title = "Capital Savings and Return on Equity",
+          table.layout = "n=d#-t-as-",
+          notes = "\\parbox[t]{10cm}{The table shows the relationship between the measure of capital savings and return on equity. The dependent variable in each regression is the return on equity using PL before taxes. In column (2) and (3) I control for asset size, tier one capital size, and mean PD. In regressions (3) I also include bank and year fixed effects.}", 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          dep.var.labels = c( "ROE"), column.sep.width = "2pt",
+          covariate.labels = c("log Savings", "log Total asset","log CT1 capital","Portfolio mean PD"),
+          add.lines = list(c("Year FE", "No", "No","Yes"),
+                           c("Bank FE","No", "No","Yes")))
+
+
+
+```  
+
+
+
+```{r, fig.height = 10, fig.width = 7, results="asis",  out.width = "1\\textwidth", cache = FALSE, warning=FALSE, message=FALSE}
+
+stargazer(reg.hdfe3,reg.hdfe3.1,reg.hdfe3.2,
+          header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small", 
+          title = "Capital Savings and Risk",
+          table.layout = "n=d#-t-as-",
+          notes = "\\parbox[t]{10cm}{The table shows the relationship between the measure of capital savings and overall risk. The dependent variable in each regression is the Z-score measure. In column (2) and (3) I control for asset size, tier one capital size, and mean PD. In regressions (3) I also include country and year fixed effects.}", 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          dep.var.labels = c("Z-score"), column.sep.width = "2pt",
+          covariate.labels = c("log Savings", "log Total asset","log CT1 capital","Portfolio mean PD"),
+          add.lines = list(c("Year FE", "No", "No","Yes"),
+                           c("Country FE","No", "No","Yes")))
+
+
+
+```  
+## Robustness
+
+## Conclusion
+
+## References
+
+
