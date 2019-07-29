@@ -4,3 +4,5 @@
 .Ruserdata
 packrat/lib*/
 packrat/src/
+Analysis/Draft/Draft_cache/
+Analysis/Draft/Draft_files/
