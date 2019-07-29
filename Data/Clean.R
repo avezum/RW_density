@@ -124,6 +124,16 @@ load("Data/Temp/BankScope.Rda")
 # Merge Pillar-III data by bank to bankscope                                   #
 #------------------------------------------------------------------------------#
 
+## Aggregated SA exposures at bank-year level
+bank.data <- SA.data %>% 
+  group_by(name,bvdid,Country,year) %>%
+  filter(Method %in% c("SA"))%>%
+  summarize(RWA.SA = sum(RWA, na.rm = TRUE),
+            EAD.SA = sum(EAD, na.rm = TRUE))%>%
+  mutate(RW.SA = RWA.SA/EAD.SA)%>%
+  ungroup()%>%
+  full_join(bankscope,by=c("bvdid","year"))
+
 ## Aggregated IRB exposures at bank-portfolio-year level 
 for(i in c("Wholesale","Retail","Equity")) {
 bank.data <- IRB.data %>% 
@@ -138,22 +148,14 @@ bank.data <- IRB.data %>%
   mutate(!!(paste("RW" ,"hat"    , i , sep=".")) := get(paste("K","hat", i , sep="."))*12.5/get(paste("EAD", i , sep=".")),
          !!(paste("RWA","savings", i , sep=".")) := (get(paste("K","hat", i , sep="."))-get(paste("K", i , sep=".")))*12.5,
          !!(paste("RW" ,"savings", i , sep=".")) := get(paste("RWA","savings", i , sep="."))/get(paste("EAD", i , sep=".")))%>%
-  full_join(bankscope,by=c("bvdid","year"))
+  full_join(bank.data,by=c("bvdid","year"))
 }
 
-## Aggregated SA exposures at bank-year level
-bank.data <- SA.data %>% 
-  group_by(name,bvdid,Country,year) %>%
-  filter(Method %in% c("SA"))%>%
-  summarize(RWA.SA = sum(RWA, na.rm = TRUE),
-            EAD.SA = sum(EAD, na.rm = TRUE))%>%
-  mutate(RW.SA = RWA.SA/EAD.SA)%>%
-  ungroup()%>%
-  full_join(bank.data,by=c("bvdid","year"))%>%
-  
 #------------------------------------------------------------------------------#
 # Basic cleaning and variable calculation                                      #
 #------------------------------------------------------------------------------#
+
+bank.data <- bank.data %>%
   rowwise() %>%
    mutate(EAD.IRB     = sum(EAD.Wholesale, EAD.Retail, EAD.Equity, na.rm = TRUE),
           EAD         = sum(EAD.IRB, EAD.SA, na.rm = TRUE),
@@ -257,24 +259,35 @@ cross.section.decomposition <- cross.section.decomposition %>%
          mean.q.Wholesale = mean.EAD.Wholesale/mean.EAD.IRB,
          mean.q.Retail    = mean.EAD.Retail/mean.EAD.IRB,
          mean.q.Equity    = mean.EAD.Equity/mean.EAD.IRB,
-         RW.hat.Wholesale  = ifelse(is.na(RW.hat.Wholesale),mean.RW.hat.Wholesale,RW.hat.Wholesale),
+         RW.hat.Wholesale = ifelse(is.na(RW.hat.Wholesale),mean.RW.hat.Wholesale,RW.hat.Wholesale),
          RW.hat.Retail    = ifelse(is.na(RW.hat.Retail),mean.RW.hat.Retail,RW.hat.Retail),
          RW.hat.Equity    = ifelse(is.na(RW.hat.Equity),mean.RW.hat.Equity,RW.hat.Equity),
          RW.SA            = ifelse(is.na(RW.SA),mean.RW.SA,RW.SA))%>%
   mutate_at(vars(contains("q")), 
             rlang::as_function(function(x) ifelse(is.na(x),0,x)))%>%
+  mutate(SA.gain = q.SA*(RW.SA-mean.RW.SA),
+         IRB.gain       = (1-q.SA)*(q.Wholesale*(RW.hat.Wholesale-mean.RW.hat.Wholesale)+
+                                    q.Retail*(RW.hat.Retail-mean.RW.hat.Retail)+
+                                    q.Equity*(RW.hat.Equity-mean.RW.hat.Equity)),
+         mix.gain       = (1-q.SA)*((q.Wholesale-mean.q.Wholesale)*(RW.hat.Wholesale)+
+                                    (q.Retail-mean.q.Retail)*(RW.hat.Retail)+
+                                    (q.Equity-mean.q.Equity)*(RW.hat.Equity)),
+        dispersion.gain = (1-q.SA)*(mean.RW.savings-RW.savings),
+        rollout.gain    = (q.SA-mean.q.SA)*(RW.SA-RW.IRB),
+        total.gain = RW-mean.RW)%>%
   # Specific bank benchmark
-  ungroup()%>%
-  arrange(desc(RW.IRB)) %>% 
-  mutate(high.RW.SA            = nth(RW.SA, 2),
-         high.RW.savings       = nth(RW.savings, 2),
-         high.RW.hat.Wholesale = nth(RW.hat.Wholesale, 2),
-         high.RW.hat.Retail    = nth(RW.hat.Retail, 2),
-         high.RW.hat.Equity    = nth(RW.hat.Equity, 2),
-         high.q.SA        = nth(q.SA, 2),
-         high.q.Wholesale = nth(q.Wholesale, 2),
-         high.q.Retail    = nth(q.Retail, 2),
-         high.q.Equity    = nth(q.Equity, 2))
+  ungroup()
+
+  #arrange(desc(RW.IRB)) %>% 
+  #mutate(high.RW.SA            = nth(RW.SA, 2),
+  #       high.RW.savings       = nth(RW.savings, 2),
+  #       high.RW.hat.Wholesale = nth(RW.hat.Wholesale, 2),
+  #       high.RW.hat.Retail    = nth(RW.hat.Retail, 2),
+  #       high.RW.hat.Equity    = nth(RW.hat.Equity, 2),
+  #       high.q.SA        = nth(q.SA, 2),
+  #       high.q.Wholesale = nth(q.Wholesale, 2),
+  #       high.q.Retail    = nth(q.Retail, 2),
+  #       high.q.Equity    = nth(q.Equity, 2))
 
 # Save clean data frame
 save(cross.section.decomposition,file=paste0("Data/Datasets/CrossSectionDecomposition.Rda"))
@@ -342,6 +355,7 @@ for(i in c("Wholesale", "Retail", "Equity")) {
   ungroup()%>%
   arrange(get(j)) %>% 
   mutate(t0.RW.savings       = first(RW.savings),
+         t0.RW               = first(RW),
          t0.RW.SA            = first(RW.SA),
          t0.RW.hat.Wholesale = first(RW.hat.Wholesale),
          t0.RW.hat.Retail    = first(RW.hat.Retail),
@@ -349,7 +363,17 @@ for(i in c("Wholesale", "Retail", "Equity")) {
          t0.q.SA         = first(q.SA),
          t0.q.Wholesale  = first(q.Wholesale),
          t0.q.Retail     = first(q.Retail),
-         t0.q.Equity     = first(q.Equity))%>% 
+         t0.q.Equity     = first(q.Equity),
+         SA.gain        = q.SA*(RW.SA-t0.RW.SA),
+         IRB.gain       = (1-q.SA)*(q.Wholesale*(RW.hat.Wholesale-t0.RW.hat.Wholesale)+
+                                        q.Retail*(RW.hat.Retail-t0.RW.hat.Retail)+
+                                        q.Equity*(RW.hat.Equity-t0.RW.hat.Equity)),
+         mix.gain       = (1-q.SA)*((q.Wholesale-t0.q.Wholesale)*(RW.hat.Wholesale)+
+                                        (q.Retail-t0.q.Retail)*(RW.hat.Retail)+
+                                        (q.Equity-t0.q.Equity)*(RW.hat.Equity)),
+         dispersion.gain = (1-q.SA)*(t0.RW.savings-RW.savings),
+         rollout.gain    = (q.SA-t0.q.SA)*(RW.SA-RW.IRB),
+         total.gain = RW-t0.RW)%>% 
   assign(paste(j, "decomposition", sep="."),.,inherits = TRUE)
   # Save clean data frame
   save(list=paste0(j, ".decomposition"),
