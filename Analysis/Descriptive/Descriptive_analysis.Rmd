@@ -1,0 +1,385 @@
+---
+title: "Descripte analysis"
+author: "Lucas Avezum"
+date: "June 17, 2019"
+output:
+  html_document: 
+    toc: true
+  pdf_document:default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)                                                           
+library(data.table)
+library(lubridate)
+library(lfe)
+library(stargazer)
+library(ineq)
+library(DescTools)
+library(gglorenz)
+library(ggplot2)
+library(psych)
+library(reporttools)
+library(ggridges)
+library(splitstackshape)
+library(viridis)
+library(Hmisc)
+library(scales)
+
+```
+```{r load data, include=FALSE}
+rm(list = ls())   
+load("../../Data/Datasets/Pillar3Data.Rda")
+load("../../Data/Datasets/BankScope.Rda")
+data.pillar3 <- data.pillar3 %>%
+  mutate(Method2 = as.factor(ifelse(Method %in% c("IRB"), "IRB",
+                                                     sapply(Method,str_sub,start= 2,end=4)))) 
+bankscope <- bankscope %>%
+  mutate(sample = as.factor(ifelse(bvdid %in% data.pillar3$bvdid,"Yes","No")),
+         mean.ROA= ave(ROA.using.P.L.before.tax....,bvdid,FUN = function(x) mean(x, na.rm = TRUE)),
+         sd.ROA= ave(ROA.using.P.L.before.tax....,bvdid,FUN = function(x) sd(x, na.rm = TRUE)),
+         mean.CAR = ave(Equity...Total.assets....,bvdid,FUN = function(x) mean(x, na.rm = TRUE)))%>%
+mutate('Z-score'=(mean.ROA+mean.CAR)/sd.ROA)
+```
+
+```{r expand data, include=FALSE}
+
+expanded.pillar3 <- data.pillar3 %>%
+  filter(Method2 %in% c("IRB")) %>%
+  select(Bank,Country,Method,`Portfolio - level 1`,EAD,LGD,PD,year)%>%
+  mutate(EL=round(EAD*LGD/1000),EAD=round(EAD/1000),PD=PD*100)
+
+
+expanded.list <- list()
+for(i in c("EAD","EL")) {
+expanded.list[[i]] <- expanded.pillar3  %>%
+  na.omit(cols=c(i))%>%
+  expandRows(i) %>%
+  mutate(freq_type = as.factor(i))
+}
+expanded.pillar3 <-  rbindlist(expanded.list, use.names=TRUE,fill = TRUE)
+
+```
+
+## Data
+
+In this report I briefly describe the data collected so far and provide some descriptive analysis of two measures of capital savings. \newline
+
+Table 1 reports summary statistics for a few variables from Bankscope. The level division means if the bank's Pillar-III reports information has been collected. The p-values from Kruskal test reject the hypothesis that the two groups are draw from the same distribution. The banks collected tend to have higher leverage (both risk-weighted or not), be safer (higher Z-score and lower NPL to gross loans ratio), and higher return on equity.      
+
+```{r sample vs bankscope, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+options(xtable.comment = FALSE)
+vars <-bankscope%>%
+  select(ROA = ROA.using.P.L.before.tax....,
+         ROE =ROE.using.P.L.before.tax....,
+         `NPL/gross loans` = Non.Perf..Loans...Gross.Loans....,
+         `Total capital ratio` = Total.Capital.Ratio....,
+         `Equity/total assets` = Equity...Total.assets....,
+         `Z-score`) %>%
+  mutate_all(Winsorize,na.rm = TRUE, probs = c(0.025, 0.975))
+
+
+tableContinuous(vars = vars, group = bankscope$sample, longtable = FALSE,prec = 1, 
+                cap = "Summary statistics", lab = "tab: descr stat", print.pval = "kruskal",
+                stats = c("n","mean", "s", "min","median", "max"))
+
+```
+```{r  PD distribution by bank,fig.height = 7, fig.width = 7,eval=FALSE, echo=FALSE, results="hide", warning=FALSE, message=FALSE}
+expanded.pillar3 %>% 
+  filter( !is.na(PD), freq_type%in%c("EL") ) %>% 
+ggplot(aes(x = PD, y = reorder(Bank, PD,FUN = median, na.rm=TRUE))) +
+  stat_density_ridges(quantile_lines = TRUE, quantiles = 2,
+                       scale = 2 , from = 0, to = 2.5) +
+  scale_x_continuous(expand = c(0.01, 0)) +
+  scale_y_discrete(expand = c(0.01, 0)) +
+  labs(
+    title = 'PD distribution by bank',
+    subtitle = 'Data: Pillar-III reports'
+  ) +
+  theme_ridges(font_size = 13, grid = TRUE) + theme(axis.title.y = element_blank())
+```
+
+Figure 1 plots the PD distribution collected by bank.
+
+```{r  PD distribution by bank and country,fig.height = 7, fig.width = 8, echo=FALSE, results="hide", warning=FALSE, message=FALSE}
+expanded.pillar3 %>% 
+  filter( !is.na(PD),PD<100, freq_type%in%c("EL") ) %>% 
+ggplot(aes(x = PD, y = reorder(Bank, PD,FUN = median, na.rm=TRUE),color=Country,fill=Country)) +
+  stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.6,
+                       scale = 2 , from = 0, to = 2.5) +
+  scale_x_continuous(expand = c(0.01, 0)) +
+  scale_y_discrete(expand = c(0.01, 0)) +
+  labs(
+    title = 'Figure 1: PD distribution by bank',
+    subtitle = 'Ordered by median PD'
+  ) +
+  theme_ridges(font_size = 13, grid = TRUE) + theme(axis.title.y = element_blank())
+```
+
+
+## Basel formulas and capital savings
+
+$K=\sum_{i}EAD_i\times LGD_i\times\bigg[\Phi\bigg(\frac{\Phi^{-1}(PD_i)+\sqrt{\rho_i}\Phi^{-1}(0.999)}{\sqrt{1-\rho_i}}\bigg)-PD_i\bigg]$ \newline
+
+For wholesale portfolio:  \newline
+$K_{\text{wholesale}}=K\times \frac{1+(M-2.5)b(PD_i))}{1-1.5b(PD_i)}$ \newline
+with\newline
+$\rho_i = 0.12\times\bigg(\frac{1-e^{-50\times PD_i}}{1-e^{-50}}+0.24\times\bigg(1-\frac{1-e^{-50\times PD_i}}{1-e^{-50}}\bigg)\bigg)$\newline
+
+and $b(PD_i)=(0.11852-0.05478\times log(PD_i))^2$\newline
+
+For retail portfolios the formula is equal to $K$ with different formulas for the correlation coefficient:  \newline
+
+Real estate: $\rho_{i}=0.15$\newline
+
+Qualifying revolving: $\rho_{i}=0.04$ \newline
+
+Other retail: $0.03\times\bigg(\frac{1-e^{-35\times PD_i}}{1-e^{-35}}+0.16\times\bigg(1-\frac{1-e^{-35\times PD_i}}{1-e^{-35}}\bigg)\bigg)$\newline
+
+
+Using these formulas I computed two measures of capital requirement: $K_{distribution}$ using the distribution of $PD_i$ (as it is required by the Basel accords), and $K_{average}$ using $\widetilde{PD}=\sum_iEAD_iLGD_iPD_i/\sum_iEAD_iLGD_i$. The percentage change $K_{distribution}/K_{average}-1$ is called capital savings and is a measure of the amount of capital saved due to the concavity in the formula for $K$.\newline
+
+```{r mapping formulas, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+mapping_wholesale <- function(PD,LGD,M,alpha,portfolio){
+  R  <- 0.12*(1-exp(-50*PD))/(1-exp(-50))+0.24*(1-(1-exp(-50*PD))/(1-exp(-50)))
+  b  <- (0.11852-0.05478*log(PD))^2
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)*((1-1.5*b)^-1*(1+(M-2.5)*b))
+  RW <- K*12.5
+  data <- data.frame(K,RW,PD,LGD,M,R,portfolio)
+  return(data)
+}
+
+mapping_retail <- function(PD,LGD,R,alpha,portfolio){
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)
+  RW <- K*12.5
+  data <- data.frame(K,RW,PD,LGD,R,portfolio)
+  return(data)
+}
+
+
+mapping_other_retail <- function(PD,LGD,alpha,portfolio){
+  R  <- 0.03*(1-exp(-35*PD))/(1-exp(-35))+0.16*(1-(1-exp(-35*PD))/(1-exp(-35)))
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)
+  RW <- K*12.5
+  data <- data.frame(K,RW,PD,LGD,R,portfolio)
+  return(data)
+}
+```
+
+```{r savings calculation, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+
+data.pillar3   <- data.pillar3 %>%
+  filter(Method2 == "IRB",PD<1)%>%
+  mutate(K_original=RW*EAD*0.08,
+         PD_w=PD*EAD*LGD,
+         EAD_w=LGD*EAD) %>%
+  mutate(EAD_sum=ave(EAD_w,Bank,year,`Portfolio - level 1`,`Portfolio - level 2`,FUN = function(x) sum(x,na.rm = TRUE)),
+         PD_w_sum=ave(PD_w,Bank,year,`Portfolio - level 1`,`Portfolio - level 2`,FUN = function(x) sum(x,na.rm = TRUE)))%>%
+  mutate(PD_w_avg = PD_w_sum/EAD_sum)
+
+for (i in 1:nrow(data.pillar3)){
+  if (data.pillar3[i,9]!="Wholesale"){
+    next
+  }
+  data.pillar3[i,"K_calculated"] <- data.pillar3[i,"EAD"]*mapping_wholesale(data.pillar3[i,"PD"],data.pillar3[i,"LGD"],2.5,0.999,"")["K"]
+  
+  data.pillar3[i,"K_counterfactual"] <- data.pillar3[i,"EAD"]*mapping_wholesale(data.pillar3[i,"PD_w_avg"],data.pillar3[i,"LGD"],2.5,0.999,"")["K"]
+}
+
+for (i in 1:nrow(data.pillar3)){
+  if (is.na(data.pillar3[i,10])){
+    next
+  }
+  if (!data.pillar3[i,10]%in%c("Real estate")){
+    next
+  }
+  data.pillar3[i,"K_calculated"] <- data.pillar3[i,"EAD"]*mapping_retail(data.pillar3[i,"PD"],data.pillar3[i,"LGD"],0.15,0.999,"")["K"]
+  
+  data.pillar3[i,"K_counterfactual"] <- data.pillar3[i,"EAD"]*mapping_retail(data.pillar3[i,"PD_w_avg"],data.pillar3[i,"LGD"],0.15,0.999,"")["K"]
+  
+}
+
+for (i in 1:nrow(data.pillar3)){
+  if (is.na(data.pillar3[i,10])){
+    next
+  }
+  if (!data.pillar3[i,10]%in%c("Qualifying revolving")){
+    next
+  }
+  data.pillar3[i,"K_calculated"] <- data.pillar3[i,"EAD"]*mapping_retail(data.pillar3[i,"PD"],data.pillar3[i,"LGD"],0.04,0.999,"")["K"]
+  
+  data.pillar3[i,"K_counterfactual"] <- data.pillar3[i,"EAD"]*mapping_retail(data.pillar3[i,"PD_w_avg"],data.pillar3[i,"LGD"],0.04,0.999,"")["K"]
+  
+}
+for (i in 1:nrow(data.pillar3)){
+  if (is.na(data.pillar3[i,10])){
+    next
+  }
+  if (data.pillar3[i,10]!="Other retail"){
+    next
+  }
+  data.pillar3[i,"K_calculated"] <- data.pillar3[i,"EAD"]*mapping_other_retail(data.pillar3[i,"PD"],data.pillar3[i,"LGD"],0.999,"")["K"]
+  
+  data.pillar3[i,"K_counterfactual"] <- data.pillar3[i,"EAD"]*mapping_other_retail(data.pillar3[i,"PD_w_avg"],data.pillar3[i,"LGD"],0.999,"")["K"] 
+  
+}
+
+data.reduced <- data.pillar3 %>% group_by(Bank,Country,year) %>%
+  summarise_if(is.numeric,funs(sum),na.rm=TRUE) %>%
+  mutate(error = (K_calculated - K_original)/K_original,
+         savings = (K_calculated-K_counterfactual)/K_counterfactual) %>%
+  ungroup()
+
+
+```
+
+Figure 2 plots the calculated capital savings by country. Figure 3 plots the calculated capital savings by country. Figure 4 plots the evolution of calculated capital savings in time. \newline
+
+
+```{r savings by bank, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+data.reduced %>%
+ ggplot(
+            mapping = aes(x = reorder(Bank, savings,FUN = median, na.rm=TRUE),
+                          y = savings,
+                          color = Country,
+                          fill = Country)) +
+geom_boxplot(alpha = 0.5) +
+    labs(x=NULL) +
+    coord_flip() +
+  labs(
+       y =  "Capital savings",
+         title = "Figure 2: Capital savings by bank") +
+  
+  theme_bw()
+
+```
+
+
+
+```{r savings by country, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+data.reduced %>%
+ ggplot(
+            mapping = aes(x = reorder(Country, savings,FUN = median, na.rm=TRUE),
+                          y = savings)) +
+geom_boxplot() +
+    labs(x=NULL) +
+    coord_flip() +
+  labs(
+       y =  "Capital savings",
+         title = "Figure 3: Capital savings by country") +
+  theme_bw()
+
+```
+
+
+
+```{r savings by year, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+mean_cl_quantile <- function(x, q = c(0.25, 0.75), na.rm = TRUE){
+  dat <- data.frame(y = mean(x, na.rm = na.rm),
+                    ymin = quantile(x, probs = q[1], na.rm = na.rm),
+                    ymax = quantile(x, probs = q[2], na.rm = na.rm))
+  return(dat)
+}
+
+data.reduced %>%
+  mutate(time = lubridate::ymd(year, truncated = 2L))%>%
+ggplot(aes(x=time, y=savings)) +
+ geom_smooth(stat = 'summary', fun.data = mean_cl_quantile)+
+labs(y =  "Capital savings",
+     x = "Year",
+     title = 'Figure 3: Average capital savings by year',
+     subtitle = 'First and third quartile shown') +
+  theme_bw()
+```
+
+## Basel formulas and Gini coefficient
+
+As a second measure of the $PD$ distribution dispersion I compute Gini coefficients. Figure 4 shows the Lorenz curve of the $PD$ distributions  by country. Figure 5 shows the Lorenz curve of the $PD$ distributions by year. Figure 6 shows the Lorenz curve of the $PD$ distributions by Bank (names omitted for visibility). Finally Figure 7 plots the measure of capital savings and the Gini coefficients. \newline    
+
+```{r lorenz curve by country, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+expanded.pillar3 %>% 
+  filter( !is.na(PD), freq_type%in%c("EL") ) %>% 
+ggplot( aes(x=PD, color = Country)) +
+stat_lorenz() +
+coord_fixed() +
+geom_abline(linetype = "dashed") +
+   labs(
+       y =  "Lorenz curve",
+         title = "Figure 4: Lorenz curve by country") +
+theme_minimal()
+
+```
+
+
+
+```{r lorenz curve by year, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+expanded.pillar3 %>% 
+  filter( !is.na(PD), freq_type%in%c("EL") ) %>% 
+ggplot( aes(x=PD, color = as.factor(year))) +
+stat_lorenz() +
+coord_fixed() +
+geom_abline(linetype = "dashed") +
+  labs(color = "",
+       y =  "Lorenz curve",
+         title = "Figure 5: Lorenz curve by year") +
+theme_minimal()
+```
+
+
+
+```{r lorenz curve by bank, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+expanded.pillar3 %>% 
+  filter( !is.na(PD), freq_type%in%c("EL") ) %>% 
+ggplot( aes(x=PD, color = Bank)) +
+stat_lorenz() +
+coord_fixed() +
+geom_abline(linetype = "dashed") +
+  theme_minimal()+
+  labs(
+       y =  "Lorenz curve",
+         title = "Figure 6: Lorenz curve by bank") +
+theme(legend.position = "none")
+```
+
+
+
+```{r gini savings total, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+data.gini <- data.pillar3 %>% 
+  group_by(Country,Bank,year,`Portfolio - level 1`,`Portfolio - level 2`) %>%
+  mutate(weight=EAD*LGD)%>%
+  filter(weight>0, `Portfolio - level 1` %in% c("Wholesale","Retail"))%>%
+  dplyr::summarize(gini = DescTools::Gini(PD,weight),
+            K_calculated=sum(K_calculated),
+            K_counterfactual=sum(K_counterfactual)) %>%
+  mutate(savings = (K_counterfactual-K_calculated)/K_counterfactual)
+
+p <- ggplot(data = data.gini,
+            mapping = aes(x = gini, y = savings, color=`Portfolio - level 1`))
+
+ p + geom_point(alpha = 0.2)+
+theme_minimal()+
+   labs( title = "Figure 7: Capital savings and Gini coefficient",
+         subtitle = 'Each point is a bank-year-portfolio observation',
+         y =  "Inverted capital savings",
+         x = "Gini coefficient",
+         color = "")
+```
+
+
+
+
+```{r summary,eval=FALSE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+bankscope %>% 
+  subset(select = c("ROA.using.P.L.before.tax....","ROE.using.P.L.before.tax....","Non.Perf..Loans...Gross.Loans....","Total.Capital.Ratio....","Equity...Total.assets....","Employees","Total.assets","year","country","bvdid")) %>%
+  as.data.frame() %>% 
+stargazer(header = FALSE, type="latex", single.row = TRUE, column.sep.width = "1pt", font.size = "footnotesize",
+          omit.summary.stat = c("p25","p75"))
+``` 
+
+
+
