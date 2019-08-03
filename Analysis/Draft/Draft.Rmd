@@ -22,11 +22,11 @@ linkcolor: blue
 biblio-style: apsr
 subtitle: ''
 thanks: Very preliminary draft
-abstract: 'In this paper, I study the possibility, allowed by regulation, for banks
-  to increase their capital ratio while maintaning the average portfolio riskiness. Basel II introduced
-  a concave mapping from probabilities of default to capital requiremets. As a consequence,
-  banks can reduce requirements or increase risk-taking by widening their portfolio
-  credit risk distribution.'
+#abstract: 'In this paper, I study the possibility, allowed by regulation, for banks
+#  to increase their capital ratio while maintaning the average portfolio riskiness. Basel II introduced
+#  a concave mapping from probabilities of default to capital requiremets. As a consequence,
+#  banks can reduce requirements or increase risk-taking by widening their portfolio
+#  credit risk distribution.'
 toc: no
 urlcolor: null
 ---
@@ -64,7 +64,12 @@ p_w <- c(0.0, 1)
 ```{r load data, include=FALSE}
 load("../../Data/Datasets/Pillar3Data.Rda")
 load("../../Data/Datasets/BankData.Rda")
+load("../../Data/Datasets/CrossSectionDecomposition.Rda")
+load("../../Data/Datasets/timedecomposition.Rda")
+load("../../Data/Datasets/yeardecomposition.Rda")
+```
 
+```{r change data, eval= FALSE, include=FALSE}
 # Expand Pillar-III data frame to plot densities and lorenz curves
 expanded.list <- list()
 for(i in c("EAD","EL")) {
@@ -79,22 +84,19 @@ for(i in c("EAD","EL")) {
 }
 pillar3.expanded <-  rbindlist(expanded.list, use.names=TRUE,fill = TRUE)
 
-# Aggregate Pillar-III data by bank and merge to bankscope
-bank.data <- pillar3.data %>% 
-  group_by(name,bvdid,Country,year) %>%
+
+# Aggregate Pillar-III data by Portfolio
+portfolio.data <- pillar3.data %>% 
+  group_by(Country,Bank,year,Portfolio_1,Portfolio_2) %>%
   mutate(weight=EAD*LGD)%>%
-  filter(weight>0,
-         PD<1&PD>0,
-         Portfolio_1 %in% c("Wholesale","Retail"), 
-         Method2 %in% c("IRB"))%>%
+  filter(weight>0, Portfolio_1 %in% c("Wholesale","Retail"))%>%
   dplyr::summarize(gini             = DescTools::Gini(PD,weight),
-                   PD_sd            = sd(PD)*100,
-                   PD_mean          = mean(PD)*100,
                    K_calculated     = sum(K_calculated),
-                   K_original       = sum(K_original),
                    K_counterfactual = sum(K_counterfactual)) %>%
-  ungroup()%>% 
-  left_join(bank.data,by=c("bvdid","year"))%>%
+  mutate(savings = (K_counterfactual-K_calculated)/K_counterfactual)
+
+
+bank.data <- bank.data %>%
 group_by(bvdid) %>% 
   mutate(savings_log  = log(K_counterfactual-K_calculated),
          Total.assets = Total.assets/10^6,
@@ -107,33 +109,31 @@ group_by(bvdid) %>%
          savings_alt  = (K_counterfactual-K_original)/K_original,
          error        = (K_calculated - K_original)/K_original,
          asset_d      = Winsorize(log(Total.assets)-lag(log(Total.assets),order_by=year), 
-                                    probs = p_w ,na.rm = TRUE),
+                                  probs = p_w ,na.rm = TRUE),
          capital_d    = Winsorize(log(Total.Capital)-lag(log(Total.Capital),order_by=year), 
-                                    probs = p_w ,na.rm = TRUE),
+                                  probs = p_w ,na.rm = TRUE),
          PD_mean_d    = Winsorize(PD_mean-lag(PD_mean,order_by=year), 
-                                    probs = p_w ,na.rm = TRUE),
+                                  probs = p_w ,na.rm = TRUE),
          savings_d    = Winsorize(savings_log-lag(savings_log,order_by=year), 
-                                    probs = p_w ,na.rm = TRUE),
+                                  probs = p_w ,na.rm = TRUE),
          car_d  = Winsorize(Total.Capital.Ratio/100-lag(Total.Capital.Ratio/100,order_by=year), 
-                                    probs = p_w ,na.rm = TRUE),
+                            probs = p_w ,na.rm = TRUE),
          roe_d  = Winsorize(ROE.using.P.L.before.tax..../100-lag(ROE.using.P.L.before.tax..../100,order_by=year),
-                                    probs = p_w ,na.rm = TRUE)) %>%
+                            probs = p_w ,na.rm = TRUE)) %>%
   ungroup()
-  
-# Aggregate Pillar-III data by Portfolio
-portfolio.data <- pillar3.data %>% 
-  group_by(Country,Bank,year,Portfolio_1,Portfolio_2) %>%
-  mutate(weight=EAD*LGD)%>%
-  filter(weight>0, Portfolio_1 %in% c("Wholesale","Retail"))%>%
-  dplyr::summarize(gini             = DescTools::Gini(PD,weight),
-                   K_calculated     = sum(K_calculated),
-                   K_counterfactual = sum(K_counterfactual)) %>%
-  mutate(savings = (K_counterfactual-K_calculated)/K_counterfactual)
-
 
 ```
 # Introduction
 
+Many studies have questioned the reliability of banks' calculations of risk-weighted assets (RWA) for prudential purpose. The significant divergences found across banks are taken as indicating excessive subjectivity in the current rules governning banks' risk measurement and capital requirement calculations. Importantly, this subjectivity is unintended since differences in RWA driven by it do not reflect differences in risk. This paper shows that the dispersion _within_ banks' portfolio credit risk, more specifically the probability of default (PD) parameter, explains substantially the variation in RWA _across_ banks.  
+
+paragraph connecting to previous literature
+Basel II introduced a concave mapping from probabilities of default to capital requiremets. As a consequence, banks can reduce requirements or increase risk-taking by widening their portfolio credit risk distribution.
+
+To calculate equation X, or any other measure of capital savings arising from the concavity of the regulatory formula,  one needs data on individual, or group of assets' regulatory risk parameters. However, such granularity is not available in the common commercial balance sheet datasets, and, although very detailed, datasets from credit registers are restricted to one country and are not harmonized. Therefore, to analyze the drivers and implications of PD dispersion, I collected information on portfolio distribution from banks' individual Pillar-3 reports.\footnote{More specifically, I collected the information contained in tables that follow the CR5, CR6, CR10, CCR3, and CCR4 templates from the BCBS revised version of the Pillar 3 framework, or equivalent.} The sample consists of 50 large banking groups, from 10 countries, that have adopted the IRB approach. For each bank, I collected group consolidated information from the year the IRB approach was approved, which is early as 2007, until 2018. The dataset distinguishes between wholesale, retail and equity portfolios and, in most cases, between their sub-categories.\footnote{The sub-categories for wholesale are, corporate, banks, sovereign, and specialized lending, for retail, real estate, qualifying revolving credit, and other retail, and for equity, portfolios under the PD/LGD approach, and under the simple approach.} This level of portfolio breakdown is important because the regulatory formula varies across categories. It also allows me to control for variation in capital requirements due to business mix (sovereign portfolios require less capital than corporate) that could  be otherwise captured by my capital savings measure. Information on the share of portfolio under the standardized approach is also gathered, which allow me to control for the roll-out effect, i.e., strategical reduction in capital requirements by moving specific portfolios from the standardized to the IRB approach. Finally        
+
+
+paragraph on results
 
 
 # Hypotheses and Data
@@ -169,11 +169,11 @@ fig1_cap = "The figure plots the log of banks capital savings. This measure is c
 ```
 
 ```{r 1, fig.height = 4, fig.width = 5,results="hide",fig.cap= fig1_cap,fig.align = 'center'}
-bank.data %>% 
- ggplot(mapping = aes(x = reorder(name, savings_rate,FUN = median, na.rm=TRUE),
-                          y = savings_rate,
-                          color = Country,
-                          fill = Country)) +
+bank.data %>% filter(!is.na(name)) %>%
+ ggplot(mapping = aes(x = reorder(name, RW.s, FUN = median, na.rm=TRUE),
+                          y = RW.s,
+                      color= Country, 
+                      fill = Country)) +
 geom_point(alpha = 0.5,size = 2) +
     labs(x=NULL) +
     coord_flip() +
@@ -202,23 +202,23 @@ mean_cl_quantile <- function(x, q = c(0.25, 0.75), na.rm = TRUE){
 plot1 <- bank.data %>% 
   mutate(time = lubridate::ymd(year, truncated = 2L))%>%
 ggplot(aes(x=time)) +
- geom_smooth(aes( y=savings_log, color = savings_log),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
+ geom_smooth(aes( y=RW.s, color = RW.s),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
 labs(x="",y="",
      title = 'Capital savings') +
   theme_bw()
 
-plot2 <- bank.data %>% mutate(Tier.1.Ratio= Tier.1.Ratio/100) %>%
+plot2 <- bank.data %>% mutate(tier1ratio= tier1ratio/100) %>% filter(year>2001)%>%
   mutate(time = lubridate::ymd(year, truncated = 2L))%>%
 ggplot(aes(x=time)) +
-   geom_smooth(aes(y=Tier.1.Ratio, color = Tier.1.Ratio ),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
+   geom_smooth(aes(y=tier1ratio, color = tier1ratio ),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
 labs(x="",y="",
      title = 'Total capital ratio') +
   theme_bw()
 
-plot3 <- bank.data %>% mutate(ROE.using.P.L.before.tax....= ROE.using.P.L.before.tax..../100) %>%
+plot3 <- bank.data %>% mutate(ROE = ROE/100) %>% filter(year>2001)%>%
   mutate(time = lubridate::ymd(year, truncated = 2L))%>%
 ggplot(aes(x=time)) +
-   geom_smooth(aes(y=ROE.using.P.L.before.tax...., color = ROE.using.P.L.before.tax....),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
+   geom_smooth(aes(y=ROE, color = ROE),stat = 'summary', fun.data = mean_cl_quantile,color="black")+
 labs(x="",y="",
      title = 'ROE') +
   theme_bw()
@@ -253,42 +253,103 @@ ggplot(aes(x = PD, y = reorder(name, PD,FUN = median, na.rm=TRUE),color=Country,
 
 
 Finally, we supplement the pillar-3 report data with annual information on banks' balance sheets obtained from the Bureau van Dijk's BankFocus database. Table 1 show summary statistics of the final dataset. The sample includes 25 banks. We restrict the analysis to banks for which we are able to collect information from Pillar-III reports. 
+```{r, fig.height = 4, fig.width = 5, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
+time.decomposition %>% 
+  select(time,  SA.gain, IRB.gain, mix.gain, dispersion.gain, rollout.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = relevel(condition,"dispersion.gain")) %>%
+  ggplot(mapping = aes(x = time,
+                       y = value, fill = condition)) +
+geom_bar(stat = 'identity')+
+  labs(x=NULL) 
+  
+  
+```
+
+
+banks. We restrict the analysis to banks for which we are able to collect information from Pillar-III reports. 
+```{r, fig.height = 4, fig.width = 5, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
+year.decomposition %>% 
+  select(year,  SA.gain, IRB.gain, mix.gain, dispersion.gain, rollout.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = relevel(condition,"dispersion.gain")) %>%
+  ggplot(mapping = aes(x = year,
+                       y = value, fill = condition)) +
+geom_bar(stat = 'identity')+
+  labs(x=NULL) 
+  
+  
+```
 
 The current geographical composition of the sample is: 1 norwegian, 1 italian, 1 spanish, 2 british, 4 australian, 6 canadian, and 10 american banks. The target geographical composition is: 1 norwegian, 1 austrian, 2 finish, 3 belgium, 3 danish, 4 italian, 4 spanish banks, 4 dutch, 4 australian, 4 swedish, 5 french, 5 british, 6 canadian, 7 german, and 10 american banks. This sums up to 63 IRB banks. The selection criteria is asset size.
+```{r, fig.height = 4, fig.width = 5, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
+cross.section.decomposition %>% 
+  mutate(order.s = abs(dispersion.gain))%>%
+  select(name, Country, RW,order.s, SA.gain, IRB.gain, mix.gain, dispersion.gain, rollout.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = relevel(condition,"dispersion.gain")) %>%
+  ggplot(mapping = aes(x = reorder(name, order.s),
+                       y = value, fill = condition)) +
+geom_bar(stat = 'identity')+
+  labs(x=NULL) +
+    coord_flip() 
+  
+```
 
-```{r}
+```{r, fig.height = 4, fig.width = 5, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
+cross.section.decomposition %>% 
+  mutate(order.s = abs(dispersion.gain))%>%
+  select(name, Country, order.s, SA.gain, IRB.gain, mix.gain, dispersion.gain, rollout.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(value = abs(value),
+         condition = relevel(condition,"dispersion.gain")) %>%
+  ggplot(mapping = aes(x = reorder(name, order.s),
+                       y = value, fill = condition)) +
+geom_bar(stat = 'identity',position = "fill")+
+  labs(x=NULL) +
+    coord_flip() 
+  
+```
+
+```{r,  fig.height = 4, fig.width = 5, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
 fig1_cap = "The figure plots the linear relationship between the capital savings measure and,in descending order, the tier 1 capital ratio, the return on equity using PL before taxes, and the Z-score. In each graph, a point is the average across time for each bank."
 ```
 
-```{r relation, fig.height = 3, fig.width = 6, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
-plot1 <- bank.data %>% group_by(name)%>%
-  summarise_if(is.numeric,funs(mean),na.rm=TRUE)%>%
- ggplot(mapping = aes(x = savings_log,
-                      y = Tier.1.Ratio)) +
+```{r relation, fig.height = 4, fig.width = 5, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
+ bank.data %>% 
+  select(name,RW.s, tier1ratio, tier.hat) %>%
+  group_by(name)%>%
+ summarise_if(is.numeric,funs(mean),na.rm=TRUE)%>%
+  gather(condition, value, tier1ratio:tier.hat, factor_key=TRUE)%>%
+  filter(RW.s<0.4)%>%
+ ggplot(mapping = aes(x = RW.s,
+                      y = value,
+                      color = condition,
+                      fill = condition)) +
 geom_point( alpha = 0.5,size = 1) +
+  scale_y_continuous( limits=c(5, 20))+
+  labs(x="Capital savings",y="CT1 capital ratio") +
+  geom_smooth(method = "lm",color="black") +
+  theme_bw()
+```
+
+```{r relation, fig.height = 4, fig.width = 5, results="hide",fig.cap= fig1_cap,out.width = "1\\textwidth"}
+bank.data %>% 
+  select(name,RW.s, totalcapitalratio, CAR.hat) %>%
+  group_by(name)%>%
+ summarise_if(is.numeric,funs(mean),na.rm=TRUE)%>%
+  gather(condition, value, totalcapitalratio:CAR.hat, factor_key=TRUE)%>%
+  filter(RW.s<0.4)%>%
+ ggplot(mapping = aes(x = RW.s,
+                      y = value,
+                      color = condition,
+                      fill = condition)) +
+geom_point( alpha = 0.5,size = 1) +
+  scale_y_continuous( limits=c(5, 20))+
   labs(x="Capital savings",y="CT1 capital ratio") +
   geom_smooth(method = "lm",color="black") +
   theme_bw()
 
-plot2 <- bank.data %>% group_by(name)%>%
-  summarise_if(is.numeric,funs(mean),na.rm=TRUE)%>%
- ggplot(mapping = aes(x = savings_log,
-                      y = ROE.using.P.L.before.tax....)) +
-geom_point( alpha = 0.5,size = 1) +
-  labs(x="Capital savings",y="ROE") +
-  geom_smooth(method = "lm",color="black") +
-  theme_bw()
-
-plot3 <- bank.data %>% group_by(name)%>%
-  summarise_if(is.numeric,funs(mean),na.rm=TRUE)%>%
- ggplot(mapping = aes(x = savings_log,
-                      y = `Z-score`)) +
-geom_point( alpha = 0.5,size = 1) +
-  labs(x="Capital savings",y="Z-score") +
-  geom_smooth(method = "lm",color="black") +
-  theme_bw()
-
-grid.arrange(plot1, plot2,plot3, ncol=3)
 
 ```
 Banks that only implement the standardized approach (SA) for credit risk most of the sample period will also be included in the dataset. The current geographical composition of SA banks is: 1 portuguese, 1 dutch, 1 belgium, 1 finish, 1 hungarian, 2 maltese, 2 british, 2 greek, 2 polish, 3 french, 3 slovenian, 4 cypriot, 5 german, 5 italian, 8 spanish, 37 american. This sums up to 78 SA banks. The selection criteria is the same, asset size.    
