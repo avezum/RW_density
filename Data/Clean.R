@@ -9,7 +9,8 @@
 ##=============================================================================##
 
 rm(list = ls())  
-library(tidyverse)                ## Data manipulation, pipe operator 
+library(tidyverse)                ## Data manipulation, pipe operator
+library(zoo)                      ## Apply function to rolling margins of data
 source("Auxiliar/Function.R")     ## Capital requirements functions
 
 ##============================================================================##
@@ -136,8 +137,7 @@ bank.data <- SA.data %>%
             EAD.SA = sum(EAD, na.rm = TRUE))%>%
   mutate(RW.SA = RWA.SA/EAD.SA)%>%
   ungroup()%>%
-  full_join(sample, by=c("bvdid", "name", "Country","year"))%>%
-  full_join(bankscope,by=c("bvdid","year"))
+  full_join(bankscope,by=c("bvdid", "name", "Country","year"))
 
 ## Aggregated IRB exposures at bank-portfolio-year level 
 for(i in c("Wholesale","Retail","Equity")) {
@@ -151,8 +151,9 @@ bank.data <- IRB.data %>%
             !!(paste(       "RWA" , "hat", i, sep=".")) := sum(RWA.hat, na.rm = TRUE),
             !!(paste(       "EAD" ,        i, sep=".")) := sum(EAD, na.rm = TRUE))%>%
   mutate(!!(paste("RW" ,"hat"    , i , sep=".")) := get(paste("RWA","hat", i , sep="."))/get(paste("EAD", i , sep=".")),
-         !!(paste("RWA","s", i , sep=".")) := (get(paste("RWA","hat", i , sep="."))-get(paste("RWA", i , sep="."))),
-         !!(paste("RW" ,"s", i , sep=".")) := get(paste("RWA","s", i , sep="."))/get(paste("EAD", i , sep=".")))%>%
+         !!(paste("RWA","s", i , sep=".")) := get(paste("RWA","hat", i, sep="."))-get(paste("RWA", i , sep=".")),
+         !!(paste("RW" ,"s", i , sep=".")) := ifelse(get(paste("EAD", i, sep=".")) == 0, 0,
+                                                     get(paste("RWA","s", i , sep="."))/get(paste("EAD", i , sep="."))))%>%
   full_join(bank.data,by=c("bvdid","year","name","Country"))
 }
 
@@ -168,7 +169,9 @@ bank.data <- bank.data %>%
           RW       = sum(RWA.IRB, RWA.SA, na.rm = TRUE)/EAD,
           RW.IRB   = RWA.IRB/EAD.IRB,
           RWA.s    = sum(RWA.s.Wholesale, RWA.s.Retail, RWA.s.Equity, na.rm = TRUE),
-          RW.s     = RWA.s/EAD.IRB,
+          RWA.hat  = sum(RWA.hat.Wholesale, RWA.hat.Retail, RWA.hat.Equity, na.rm = TRUE),
+          RW.s     = ifelse(EAD.IRB == 0 & IRB == 0, 0, RWA.s/EAD.IRB),
+          RW.hat   = ifelse(EAD.IRB == 0 & IRB == 0, 0, RWA.hat/EAD.IRB),
           sample   = as.factor(ifelse(bvdid %in% pillar3.data$bvdid,"Yes","No")),
           ROE      = plbeforetaxmillcu/equitymillcu*100,
           ROA      = plbeforetaxmillcu/totalassetsmillcu*100,
@@ -176,12 +179,15 @@ bank.data <- bank.data %>%
           leverage = totalcapitalmillcu/totalassetsmillcu*100,
           RWA.hat  = RWA + RWA.s,
           CAR.hat  = 100*totalcapitalmillcu/RWA.hat,
-          tier.hat = 100*tier1capitalmillcu/RWA.hat) %>%
-  ungroup()%>%
-  mutate(mean.ROA = ave(ROA,bvdid,FUN = function(x) mean(x, na.rm = TRUE)),
-         sd.ROA   = ave(ROA,bvdid,FUN = function(x) sd(x, na.rm = TRUE)),
-         mean.CAR = ave(leverage,bvdid,FUN = function(x) mean(x, na.rm = TRUE)),
-         Zscore   = (mean.ROA+mean.CAR)/sd.ROA)
+          tier.hat = 100*tier1capitalmillcu/RWA.hat,
+          basel    = ifelse(basel>year,0,1)) %>%
+  ungroup()%>% group_by(bvdid) %>% rowwise() %>%
+  bank.data <- bank.data %>% 
+  arrange(bvdid,year) %>% group_by(bvdid)%>%
+  mutate(r.mean.ROA=rollapply(ROA,3,mean,na.rm = TRUE, align='right',fill=NA),
+         r.mean.CAR=rollapply(leverage,3,mean,na.rm = TRUE, align='right',fill=NA),
+         r.sd.ROA=rollapply(ROA,3,sd,na.rm = TRUE, align='right',fill=NA),
+         Zscore   = (r.mean.ROA+r.mean.CAR)/r.sd.ROA)
 
 # Save clean data frame
 save(bank.data,file=paste0("Data/Datasets/BankData.Rda"))
@@ -299,7 +305,7 @@ save(cross.section.decomposition,file=paste0("Data/Datasets/CrossSectionDecompos
 #----------------------------------------------------------------------------#
 
 # This value is used to choose the minimum number of year to compute the relative time evolution
-threshold <- 4
+threshold <- 3
 
 for(j in c("year","time")) { 
 ## SA portfolio exposure decomposition 
@@ -381,7 +387,4 @@ for(i in c("Wholesale", "Retail", "Equity")) {
   save(list=paste0(j, ".decomposition"),
        file=paste0("Data/Datasets/",j, "decomposition",".Rda"))
 }
-test <- cross.section.decomposition %>% mutate(mean.total.gain = mean(total.gain,na.rm = TRUE)) %>%
-  mutate_at(vars(SA.gain:total.gain),  funs((. - mean.total.gain)^2))%>%
-summarize_at(vars(SA.gain:total.gain),  sum, na.rm =  TRUE)%>%
-  mutate_all( funs((. / total.gain)))
+
