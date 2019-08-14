@@ -120,10 +120,15 @@ bankscope <- bankscope %>%
          -c("companyname", "countryisocode","lastavail", "id")) %>% 
   # Turn numeric variables to numeric format
   mutate_at(c(grep("usd", names(bankscope))[1]:ncol(bankscope)),as.numeric) %>%
+  # Convert to USD
+  rowwise() %>%
+  mutate_at(c(grep("lcu$", names(bankscope))[1]:ncol(bankscope)),
+            funs(prod(.,exchangeratefromoriginalcurrencyusd, na.rm = TRUE))) %>%
   # Add Basel 2 country level introduction year
-  left_join(basel.indicator, by = c("Country"))
+  ungroup() %>%
+  left_join(basel.indicator, by = c("Country")) %>%
   # Add EBA capital exercise information
-bankscope <- bankscope %>% left_join(EBA.indicator, by = c("bvdid"))
+  left_join(EBA.indicator, by = c("bvdid"))
 
 # Save data frame
 save(bankscope,file=paste0("Data/Temp/BankScope.Rda"))
