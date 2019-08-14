@@ -2,6 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+*.pdf
+*.html
+*.docx
 packrat/lib*/
 packrat/src/
 Analysis/Draft/Draft_cache/
