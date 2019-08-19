@@ -1,9 +1,11 @@
 ---
-title: "Distribution of portfolio credit risk and capital savings"
+title: "Credit risk distribution and capital savings"
 author:
-- affiliation: Tilburg University; l.avezum@uvt.nl
-  name: Lucas Avezum
-date: "`r format(Sys.time(), '%d %B, %Y')`"
+- name: Lucas Avezum
+  affiliation: CentER and EBC, Tilburg University; l.avezum@uvt.nl; +31134664531;  Warandelaan 2, 5037 AB Tilburg, NL, The Netherlands 
+date: 
+header-includes:
+   - \usepackage{rotating, graphicx, dcolumn}
 output:
   pdf_document:
     citation_package: natbib
@@ -12,8 +14,8 @@ output:
   html_document:
     df_print: paged
   word_document: default
-bibliography: null
-citecolor: null
+bibliography: ../../Auxiliar/mybibfile.bib
+citecolor: black
 anonymous: no
 fontsize: 12pt
 geometry: margin= 1in
@@ -45,7 +47,7 @@ knitr::opts_chunk$set(echo      = FALSE,
                       error     = FALSE,
                       message   = FALSE, 
                       comment   = "",
-                      cache     = TRUE)
+                      cache     = FALSE)
 # These options are tuned for manuscript/presentation. 
 # They basically run R in the background except for spitting out figures/tables
 # They also cache results so that you don't have to run your whole analysis every time you fix a typo
@@ -60,9 +62,9 @@ library(stargazer)           ## Latex tables
 library(lfe)                 ## High-dimensional fixed effects
 library(gridExtra)           ## Plot side-by-side
 library(DescTools)           ## Command to winsorize variables
-library(robustHD)
 
 p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+
 ```
 
 ```{r load data, include=TRUE}
@@ -71,7 +73,6 @@ load("../../Data/Datasets/BankData.Rda")
 load("../../Data/Datasets/CrossSectionDecomposition.Rda")
 load("../../Data/Datasets/timedecomposition.Rda")
 load("../../Data/Datasets/yeardecomposition.Rda")
-load("../../Data/Datasets/DifInDif.Rda")
 ```
 
 ```{r change data, eval= FALSE, include=FALSE}
@@ -134,212 +135,163 @@ summarize_at(vars(SA.gain:total.gain),  sum, na.rm =  TRUE)%>%
   mutate_all( funs((. / total.gain)))
 ```
 
-```{r}
 
-bank.data <- bank.data %>% ungroup() %>%
-  mutate(RW.hat=RW.hat*100,
-         RW.s=RW.s*100)
-```
 
-# List
-* Use the share under IRB to weight capital savings measure (share vs intensity). Include share in regressions plus interaction with capital savings
+# To-Do List {-}
 
-* Explore alternative capital savings measures, such as, savings in terms of capital (mn),in terms of capital ratio, in terms of capital ratio savings (counterfactual vs actual)
+\begin{itemize}
 
-* Plot marginal increase of savings in time. 
+\item Data collection
 
-* Decompose capital savings: share effect, size effect, etc...
+   \begin{itemize}
 
-* Remove step effect from regressions: average across all IRB banks (add IRB dummy) or IRB specific dummy (average out the step for each bank). Idea is to focus on difference across IRB banks. it might not make sense to include SA banks anymore.
+   \item[$-$] Collect information for 32 IRB banks that participate on EBA exercise out of 52. Currently, we have information for 10 banks (and 35 SA banks).
+     
+   \end{itemize}
 
-* Plot capital savings measures to other risk variables
+\item Write data section:
 
-* Plot cross section for different capital saving measures (replicate first plot)
+   \begin{itemize}
 
-* check and better clean data: 
+   \item[$-$] Use decomposition to show how the intensity and extensity of PD distribution effect varies in time and across banks.
+  
+   \item[$-$] Use decomposition to calculate how much of the PD distribution effect variation explains total RW variation (both in time and across banks). 
+  
+   \item[$-$] Explain capital savings measure 
+  
+   \item[$-$] Summary statistics
+   
+   \end{itemize}  
 
-# Capital savings measure
+\item Analysis  
+
+   \begin{itemize}
+   
+   \item[$-$] EBA vs non-EBA:Implement matching strategy following \cite{gropp2018banks}.
+   
+   \item[$-$] Dif-on-Dif for EBA sample. Use capital shortfall as treatment intensity indicator.
+  
+   \item[$-$] OLS relating capital savings measure to, capital ratio, RWA, ROA, ROE, Z-score, leverage.
+   
+   \end{itemize}
+
+\item Robustness
+   \begin{itemize}
+
+   \item[$-$] Previous analysis with alternative capital savings measures (Gini coefficient, RW)
+   
+   \end{itemize}  
+
+\item Extension
+
+   \begin{itemize}
+  
+   \item[$-$] Use Barth measures to study interaction with regulation.
+  
+   \item[$-$] Use corporate governance \citep{anginer2016corporate} and subordinated debt \citep{gropp2018banks} to study different incentive to raise capital.
+  
+   \item[$-$] Use NPL ratios to check if PD dispersion is associated with better risk management practices [@cucinelli2018credit].
+  
+   \item[$-$] Check portfolio-level effects, for instance, corporate vs real estate. 
+   
+   \end{itemize}
+\end{itemize}
+\newpage
+
+# Introduction
+
+# Background 
 
 In this section I describe the chosen method to measure differences in risk distributions:
 
 \begin{equation}
-\text{Capital savings}_{i}= \frac{f(\overline{PD})\sum_{i}EAD_iLGD_i-\sum_{i}EAD_iLGD_if(PD_i)}{\sum_{i}EAD_i},
+\label{eq1}
+\text{RWA}= 12.5 \sum_{i}EAD_iLGD_i f(PD_i),
+\end{equation}
+
+\begin{equation}
+\label{eq2}
+\widehat{\text{RWA}}= 12.5 f(\overline{PD})\sum_{i}EAD_iLGD_i,
 \end{equation}
 
 where $i$ is one asset of the portfolio, $f()$ is the regulatory formula and, 
 
-\begin{equation}
+\begin{equation*}
 \overline{PD}=\frac{\sum_iEAD_iLGD_iPD_i}{\sum_iEAD_iLGD_i}.
+\end{equation*}
+
+The capital savings measure is the difference between equations \ref{eq1} and \ref{eq2}:  
+
+\begin{equation}
+\label{eq3}
+\text{RWA savings}=\widehat{\text{RWA}}-\text{RWA},
 \end{equation}
 
+\newpage
+
+# Data
 
 ```{r}
-savings_cap = "The figure plots the log of banks capital savings. This measure is calculated using equation 1. Each point in the plot is a bank-year observation."
+savings_cap = "The figure plots the log of banks capital savings. This measure is calculated using equation \\ref{eq3}. Each point in the plot is a bank-year observation."
 ```
 
 ```{r, fig.height = 5, fig.width = 5,results="hide",fig.cap= savings_cap,fig.align = 'center'}
 bank.data %>% filter(!is.na(RW.s), IRB == 1) %>%
- ggplot(mapping = aes(x = reorder(name, RW.s, FUN = median, na.rm=TRUE),
-                          y = RW.s,
+ ggplot(mapping = aes(x = reorder(name, log.RWA.s, FUN = median, na.rm=TRUE),
+                          y = log.RWA.s,
                       color= Country, 
                       fill = Country)) +
 geom_point(alpha = 0.5,size = 2) +
     labs(x=NULL) +
     coord_flip() +
-  labs(y =  "Capital savings") +
-  
+  labs(y =  "Capital savings (USD mn)") +
   theme_bw()
 
 ```
 
+\newpage
 
+## Capital Ratio Savings
 
-
-
-
-
-
-
-
-
-```{r}
-fig3_cap = "PD distribution by bank. The figure shows smoothed PD distributions for each bank in our data. Banks are ranked by median PD and colored by host-country"
-```
-
-
-```{r, fig.height = 10, fig.width = 7, eval=FALSE, include=FALSE, results="hide",fig.cap= fig3_cap,out.width = "1\\textwidth"}
-pillar3.expanded %>% 
-  filter( !is.na(PD),PD<100, freq_type%in%c("EL") ) %>% 
-ggplot(aes(x = PD, y = reorder(name, PD,FUN = median, na.rm=TRUE),color=Country,fill=Country)) +
-  stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.6,
-                       scale = 2 , from = 0, to = 0.05) +
-  scale_x_continuous(expand = c(0.01, 0),labels = scales::percent) +
-  scale_y_discrete(expand = c(0.01, 0)) +
-  labs(
-    x = 'Probability of default') +
-  theme_ridges(font_size = 13, grid = TRUE) + 
-  theme(axis.title.y = element_blank())
-```
-
-
-
-
-# Decomposition
 
 \begin{equation}
-\begin{aligned}
-\Delta RW & = q_{B}^{SA} \Delta RW^{SA}+(1-q_{B}^{SA})\sum_{j=1}^{P} q_{B}^{j}\Delta \hat{RW}^{j} \\ 
-& + (1-q_{B}^{SA})\sum_{j=1}^{P} \hat{RW}^{j} \Delta q^{j} -(1-q_{B}^{SA})\Delta RW^{S} + (RW^{SA}-RW^{IRB})\Delta q^{SA},
-\end{aligned}
+\label{eq4}
+\text{Counterfactual capital ratio}=\frac{\text{Capital}}{\widehat{\text{RWA}}},
 \end{equation}
 
-\newpage
-## Time decomposition 
+\begin{equation}
+\label{eq5}
+\text{Capital ratio savings}=\text{Counterfactual capital ratio}- \text{Observed capital ratio},
+\end{equation}
 
 ```{r}
-time.dec_cap = "Time decompostion. The figure shows the contribution of each component compared to the time of IRB introduction (t=0). The figure and calculations include only banks with observations for at least 5 consecutive years. The black line is the net change. Year decompostion. The figure shows the contribution of each component compared to 2008. The figure and calculations include all banks in the sample. The black line is the net change." 
+savings_cap = "The figure plots the capital ratio savings measure. This measure is calculated using equation \\ref{eq5}. Each point in the plot is a bank-year observation."
 ```
 
-```{r, fig.height = 4, fig.width = 7, results="hide",fig.cap= time.dec_cap,out.width = "1\\textwidth"}
-time.lable <- c("t=0", "t=1", "t=2", "t=3", "t=4")
-plot1 <-time.decomposition %>% 
-  select(time, RW, t0.RW,  SA.gain, IRB.gain, mix.gain, dispersion.gain, rollout.gain) %>%
-  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
-  mutate(condition = relevel(condition,"dispersion.gain"),
-         RW = RW - t0.RW,
-         time = as.factor(time)) %>%
-  ggplot(mapping = aes(x = time,
-                       y    = value, 
-                       fill = condition)) +
-geom_bar(stat = 'identity')+
-geom_line(aes(group=1, y = RW))  +
-  labs( y = 'Change from t=0', subtitle = "Plot a" ) +
-  scale_fill_discrete(labels = c("PD distribution effect", "SA effect", "IRB effect","Mix effect","Roll-out effect"), name = "Component")+
-  scale_x_discrete( name=NULL,breaks = c("0","1","2","3","4"),labels = c("t=0","t=1","t=2","t=3","t=4")) +
- theme(legend.position = c(0.3, 0.2), 
-        legend.title = element_blank(), 
-        legend.background=element_blank())
-
-year.decomposition <- year.decomposition %>%
-  mutate(RW_2 = RW - t0.RW,
-         year = as.factor(year)) 
-plot2 <- year.decomposition %>% 
-  select(year,RW,  SA.gain, IRB.gain, mix.gain, dispersion.gain, rollout.gain) %>%
-  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
-  mutate(condition = relevel(condition,"dispersion.gain")) %>%
-  ggplot(mapping = aes(x = year)) +
-geom_bar(aes(y = value, 
-          fill = condition),
-          stat = 'identity')+
-geom_line(data = year.decomposition, 
-          aes(group=1,y = RW_2))  +
-  labs(y = 'Change from 2008', x=NULL, subtitle = "Plot b") +
-  scale_fill_discrete(labels = c("PD distribution effect", "SA effect", "IRB effect","Mix effect","Roll-out effect"), name = "Component")+
-  scale_x_discrete(breaks = c("2008","2010","2012","2014","2016","2018"))+
-theme(legend.position='none')
-grid.arrange(plot1, plot2, ncol=2)
-    
-```
-
-
-\newpage
-
-## Cross-section decomposition
-
-```{r}
-cross.dec_cap = "Cross-section decompostion. The figure shows the contribution of each component compared to the average bank. The figure and calculations include all banks in the sample. The black line is the total RW. Relative cross-section decompostion. The figure shows the relative contribution of each component compared to the average bank. The figure and calculations include all banks in the sample. " 
-```
-
-```{r, fig.height = 5, fig.width = 7, results="hide",fig.cap= cross.dec_cap,out.width = "1\\textwidth"}
-plot1 <- cross.section.decomposition %>% 
-  mutate(order.s = abs(dispersion.gain))%>%
-  select(name, Country, total= total.gain, order.s, SA.gain, IRB.gain, mix.gain, dispersion.gain, rollout.gain) %>%
-  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
-  mutate(condition = relevel(condition,"dispersion.gain")) %>%
-  ggplot(mapping = aes(x = reorder(name, order.s),
-                       y = value, fill = condition)) +
-geom_bar(stat = 'identity')+
-  geom_line(aes(y = total,group=1))  +
-  labs(x=NULL, y= NULL,subtitle = "Plot a") +
+```{r, fig.height = 5, fig.width = 5,results="hide",fig.cap= savings_cap,fig.align = 'center'}
+bank.data %>% filter(!is.na(RW.s), IRB == 1) %>%
+ ggplot(mapping = aes(x = reorder(name, CAR.dif, FUN = median, na.rm=TRUE),
+                          y = CAR.dif,
+                      color= Country, 
+                      fill = Country)) +
+geom_point(alpha = 0.5,size = 2) +
+    labs(x=NULL) +
     coord_flip() +
-  scale_fill_discrete(labels = c("PD distribution effect", "SA effect", "IRB effect","Mix effect","Roll-out effect"), name = "Component")+
- theme(legend.position='none')
+  labs(y =  "Capital ratio savings (%)") +
+  theme_bw()
 
-plot2 <- cross.section.decomposition %>% 
-  mutate(order.s = abs(dispersion.gain))%>%
-  select(name, Country, order.s, SA.gain, IRB.gain, mix.gain, dispersion.gain, rollout.gain) %>%
-  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
-  mutate(value = abs(value),
-         condition = relevel(condition,"dispersion.gain")) %>%
-  ggplot(mapping = aes(x = reorder(name, order.s),
-                       y = value, fill = condition)) +
-geom_bar(stat = 'identity',position = "fill")+
-  labs(x=NULL, y= NULL,subtitle = "Plot b") +
-    coord_flip() +
-  scale_fill_discrete(labels = c("PD distribution effect", "SA effect", "IRB effect","Mix effect","Roll-out effect"), name = "Component")+
-   theme(legend.title = element_blank(), 
-        legend.background=element_blank(),
-       legend.text=element_text(size=7),
-       axis.text.y = element_blank())
-
-grid.arrange(plot1, plot2, ncol=2)
-  
-  
 ```
-
-
-
-# Counterfactual analysis
 
 ```{r}
 tier1_cap = "The figure shows scatter plots and the linear relationship between the capital savings measure and capital ratios. The y-axis variable on plots a and b is the tier 1 capital ratio, and on plots c and d is the total capital ratio. Plots a and c plots all data points in the sample. Plots b and d plots the average across time for bank using the IRB approach."
 ```
 
 ```{r , fig.height = 6, fig.width = 7, results="hide",fig.cap= tier1_cap,out.width = "1\\textwidth"}
- plot1 <- bank.data %>%  filter(!is.na(RW.s),
+ plot1 <- bank.data %>%  ungroup() %>%
+  filter(!is.na(RW.s),
          !is.na(basel),
          tier1capitalmillcu < totalcapitalmillcu)%>% 
-  mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE) %>%
+  mutate_if(is.numeric,Winsorize,probs = c(0.01, 0.99) ,na.rm = TRUE) %>%
   select(name,RW.s, tier1ratio, tier.hat, IRB) %>%
   gather(condition, value, tier1ratio:tier.hat, factor_key=TRUE)  %>% 
  ggplot(mapping = aes(x = RW.s,
@@ -355,9 +307,10 @@ geom_point( alpha = 0.5,size = 1) +
   scale_color_discrete(labels = c("Actual", "Counterfactual")) +
 theme(legend.position='none')
 
-plot2 <- bank.data %>%  filter(!is.na(RW.s),
+plot2 <- bank.data %>% ungroup() %>%
+  filter(!is.na(RW.s),
          !is.na(basel),
-         tier1capitalmillcu < totalcapitalmillcu)%>% mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE) %>%
+         tier1capitalmillcu < totalcapitalmillcu)%>% mutate_if(is.numeric,Winsorize,probs = c(0.01, 0.99) ,na.rm = TRUE) %>%
   select(name,RW.s, tier1ratio, tier.hat, IRB) %>%
   filter(!is.na(RW.s), IRB == 1) %>%
   group_by(name)%>%
@@ -379,9 +332,10 @@ geom_point( alpha = 0.5,size = 1) +
         legend.background=element_blank())
  
  
-plot3 <- bank.data %>%  filter(!is.na(RW.s),
+plot3 <- bank.data %>% ungroup() %>%
+  filter(!is.na(RW.s),
          !is.na(basel),
-         tier1capitalmillcu < totalcapitalmillcu)%>% mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE) %>%
+         tier1capitalmillcu < totalcapitalmillcu)%>% mutate_if(is.numeric,Winsorize,probs = c(0.01, 0.99) ,na.rm = TRUE) %>%
   select(name,RW.s, totalcapitalratio, CAR.hat, IRB) %>%
   gather(condition, value, totalcapitalratio:CAR.hat, factor_key=TRUE)%>%
  ggplot(mapping = aes(x = RW.s,
@@ -397,9 +351,11 @@ geom_point( alpha = 0.5,size = 1) +
   scale_fill_discrete(labels = c("Actual", "Counterfactual"), name = "Total capital ratio")+
   theme(legend.position='none')
 
-plot4 <- bank.data %>% filter(!is.na(RW.s),
+plot4 <- bank.data %>% ungroup() %>%
+  filter(!is.na(RW.s),
          !is.na(basel),
-         tier1capitalmillcu < totalcapitalmillcu)%>% mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE) %>%
+         tier1capitalmillcu < totalcapitalmillcu)%>% 
+  mutate_if(is.numeric,Winsorize,probs = c(0.01, 0.99) ,na.rm = TRUE) %>%
   select(name,RW.s, totalcapitalratio, CAR.hat, IRB) %>%
   filter(!is.na(RW.s), IRB == 1) %>%
   group_by(name)%>%
@@ -421,22 +377,157 @@ geom_point( alpha = 0.5,size = 1) +
 grid.arrange(plot1, plot2, plot3, plot4, ncol=2)
 ```
 
+```{r}
+fig3_cap = "PD distribution by bank. The figure shows smoothed PD distributions for each bank in our data. Banks are ranked by median PD and colored by host-country"
+```
+
+
+```{r, fig.height = 10, fig.width = 7, eval=FALSE, include=FALSE, results="hide",fig.cap= fig3_cap,out.width = "1\\textwidth"}
+pillar3.expanded %>% 
+  filter( !is.na(PD),PD<100, freq_type%in%c("EL") ) %>% 
+ggplot(aes(x = PD, y = reorder(name, PD,FUN = median, na.rm=TRUE),color=Country,fill=Country)) +
+  stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.6,
+                       scale = 2 , from = 0, to = 0.05) +
+  scale_x_continuous(expand = c(0.01, 0),labels = scales::percent) +
+  scale_y_discrete(expand = c(0.01, 0)) +
+  labs(
+    x = 'Probability of default') +
+  theme_ridges(font_size = 13, grid = TRUE) + 
+  theme(axis.title.y = element_blank())
+```
+
+\newpage 
+
+## Decomposition
+
+Rearranging \ref{eq3} and dividing by EAD we have:
+
+\begin{equation}
+\begin{aligned}
+RW & =  \widehat{\text{RW}} +\text{RWA savings} \\
+   & =  \widehat{\text{RW}} +\text{RW}^s 
+\end{aligned}
+\end{equation}
+
+I use the method proposed by @cannata2012inside to decompose the components of risk-weights. 
+
+\begin{equation}
+\begin{aligned}
+\Delta \text{RW} & = q_{B}^{SA} \Delta \text{RW}^{SA}+(1-q_{B}^{SA})\sum_{j=1}^{P} q_{B}^{j}\Delta \widehat{\text{RW}}^{j} \\ 
+& + (1-q_{B}^{SA})\sum_{j=1}^{P} \widehat{\text{RW}}^{j} \Delta q^{j}  + (\text{RW}^{SA}-\widehat{\text{RW}})\Delta q^{SA} -(1-q_{B}^{SA})\Delta \text{RW}^{S}+ \text{RW}^{S}\Delta q^{SA}\\
+& = \text{Other effects} -\underbrace{(1-q_{B}^{SA})\Delta \text{RW}^{S}}_\text{Intensive margin}+ \underbrace{\text{RW}^{S}\Delta q^{SA}}_\text{Extensive margin}
+\end{aligned}
+\end{equation}
+
+
+```{r}
+time.dec_cap = "Time decompostion. The figure shows the contribution of each component compared to the time of IRB introduction (t=0). The figure and calculations include only banks with observations for at least 5 consecutive years. The black line is the net change. Year decompostion. The figure shows the contribution of each component compared to 2008. The figure and calculations include all banks in the sample. The black line is the net change." 
+```
+
+```{r, fig.height = 4, fig.width = 7, results="hide",fig.cap= time.dec_cap,out.width = "1\\textwidth"}
+
+plot1 <-time.decomposition %>% 
+  select(time, RW, t0.RW,  SA.gain, IRB.gain, mix.gain, int.gain, ext.gain, rollout.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = factor(condition,levels=c("int.gain","ext.gain")),
+         RW = RW - t0.RW,
+         time = as.factor(time)) %>%
+  ggplot(mapping = aes(x = time,
+                       y    = value, 
+                       fill = condition)) +
+geom_bar(stat = 'identity')+
+geom_line(aes(group=1, y = RW))  +
+  labs( y = 'Change from t=0', subtitle = "Plot a" ) +
+  scale_fill_discrete(labels = c("Intensive effect", "Extensive effect", "Others"), name = "Component")+
+  scale_x_discrete( name=NULL,breaks = c("0","2","4","6","8"),labels = c("t=0","t=2","t=4","t=6","t=8")) +
+ theme(legend.position = c(0.3, 0.1), 
+        legend.title = element_blank(), 
+        legend.background=element_blank())
+
+year.decomposition <- year.decomposition %>%
+  mutate(RW_2 = RW - t0.RW,
+         year = as.factor(year)) 
+plot2 <- year.decomposition %>% 
+  select(year,RW,  SA.gain, IRB.gain, mix.gain, int.gain, ext.gain, rollout.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = factor(condition,levels=c("int.gain","ext.gain"))) %>%
+  ggplot(mapping = aes(x = year)) +
+geom_bar(aes(y = value, 
+          fill = condition),
+          stat = 'identity')+
+geom_line(data = year.decomposition, 
+          aes(group=1,y = RW_2))  +
+  labs(y = 'Change from 2008', x=NULL, subtitle = "Plot b") +
+  scale_fill_discrete(labels = c("PD distribution effect", "SA effect", "IRB effect","Mix effect","Roll-out effect"), name = "Component")+
+  scale_x_discrete(breaks = c("2008","2010","2012","2014","2016","2018"))+
+theme(legend.position='none')
+grid.arrange(plot1, plot2, ncol=2)
+    
+```
+
+
+
+```{r}
+cross.dec_cap = "Cross-section decompostion. The figure shows the contribution of each component compared to the average bank. The figure and calculations include all banks in the sample. The black line is the total RW. Relative cross-section decompostion. The figure shows the relative contribution of each component compared to the average bank. The figure and calculations include all banks in the sample. " 
+```
+
+```{r, fig.height = 5, fig.width = 7, results="hide",fig.cap= cross.dec_cap,out.width = "1\\textwidth"}
+plot1 <- cross.section.decomposition %>% filter(q.SA<1)%>%
+  mutate(order.s = abs(int.gain))%>%
+  select(name, Country, total= total.gain, order.s, SA.gain, IRB.gain, mix.gain, int.gain, ext.gain, rollout.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = factor(condition,levels=c("int.gain","ext.gain"))) %>%
+  ggplot(mapping = aes(x = reorder(name, total),
+                       y = value, fill = condition)) +
+geom_bar(stat = 'identity')+
+  geom_line(aes(y = total,group=1))  +
+  labs(x=NULL, y= NULL,subtitle = "Plot a") +
+    coord_flip() +
+  scale_fill_discrete(labels = c("Intensive effect", "Extensive effect", "Others"), name = "Component")+
+ theme(legend.position='none')
+
+plot2 <- cross.section.decomposition %>% filter(q.SA<1)%>%
+  mutate(order.s = abs(int.gain))%>%
+  select(name, Country,total= total.gain, order.s, SA.gain, IRB.gain, mix.gain, int.gain, ext.gain, rollout.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(value = abs(value),
+         condition = factor(condition,levels=c("int.gain","ext.gain"))) %>%
+  ggplot(mapping = aes(x = reorder(name, total),
+                       y = value, fill = condition)) +
+geom_bar(stat = 'identity',position = "fill")+
+  labs(x=NULL, y= NULL,subtitle = "Plot b") +
+    coord_flip() +
+  scale_fill_discrete(labels = c("Intensive effect", "Extensive effect", "Others"), name = "Component")+
+   theme(legend.title = element_blank(), 
+        legend.background=element_blank(),
+       legend.text=element_text(size=7),
+       axis.text.y = element_blank())
+
+grid.arrange(plot1, plot2, ncol=2)
+  
+  
+```
+
+
+\newpage
+
 
 
 ```{r , fig.height = 10, fig.width = 7, results="asis",out.width = "1\\textwidth"}
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
 bank.data %>% ungroup()%>%
   filter(!is.na(RW.s),
          !is.na(basel),
          tier1capitalmillcu < totalcapitalmillcu)%>%
   mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)%>%
-  subset(select = c("RW.s","tier1ratio","tier.hat","totalcapitalratio","CAR.hat","ROE","Zscore")) %>%
+  subset(select = c("log.RWA.s","tier1ratio","tier.hat","tier.dif","totalcapitalratio","CAR.hat","CAR.dif","ROE","ROA","Zscore","leverage")) %>%
   as.data.frame() %>% 
 stargazer(header = FALSE, type="latex", single.row = TRUE, column.sep.width = "1pt", font.size = "small",
           omit.summary.stat = c("p25","p75"),
-          covariate.labels = c("Capital savings","Tier 1 ratio","Counterfactual tier 1 ratio","Total ratio","Counterfactual total ratio","ROE","Z-score"),
+          covariate.labels = c("Log RWA savings","Tier 1 ratio","Counterfactual tier 1 ratio","Tier 1 ratio savings","Total ratio","Counterfactual total ratio","Capital ratio savings","ROE","ROA","Z-score","Leverage ratio"),
           title = "Summary statistics",
           table.layout = "n=d#-t-as-",
-          notes = "\\parbox[t]{11cm}{The table shows summary statistics for the sample of banks collected. Capital savings, Portfolio mean PD and, Gini coefficient were calculated using the collected information from Pillar-3 reports. The remaining variables come from BankFocus.}", 
+          notes = "\\parbox[t]{15cm}{The table shows summary statistics for the sample of banks collected. Capital savings, Portfolio mean PD and, Gini coefficient were calculated using the collected information from Pillar-3 reports. The remaining variables come from BankFocus.}", 
           notes.label = "",
           notes.align = "c", 
           notes.append = FALSE)
@@ -496,152 +587,692 @@ labs(x="",y="",
 grid.arrange(plot1, plot2, plot3, ncol=3)
 ```
 
+# Results
 
+```{r}
+
+pre.treat.out <- bank.data %>%
+  mutate(IRB = ifelse(IRB == 1, ifelse(EAD.IRB==0,NA,IRB),IRB))%>%
+  filter(year %in% c("2009","2010"),
+         !is.na(IRB)) %>%
+  select(bvdid, log.RWA.total, log.RWA.other, log.RWA.credit, log.RWA.IRB, log.RWA.SA, log.RWA.hat, log.RWA.s,
+         log.K, log.tier, totalcapitalratio, tier1ratio, CAR.dif, tier.dif) %>%
+  group_by(bvdid) %>%
+  summarize_if(is.numeric, funs(mean), na.rm = TRUE)
+
+post.treat.out <- bank.data %>%
+  mutate(IRB = ifelse(IRB == 1, ifelse(EAD.IRB==0,NA,IRB),IRB))%>%
+  filter(year %in% c("2012","2013"),
+         !is.na(IRB)) %>%
+  select(bvdid, log.RWA.total, log.RWA.other, log.RWA.credit, log.RWA.IRB, log.RWA.SA, log.RWA.hat, log.RWA.s,
+         log.K, log.tier, totalcapitalratio, tier1ratio, CAR.dif, tier.dif) %>%
+  group_by(bvdid) %>%
+  summarize_if(is.numeric, funs(mean), na.rm = TRUE)
+
+DiD.data <- bank.data %>%
+  filter(year %in% c("2010")) %>%
+  mutate(Shortfall.RW.2 = ifelse(EBAcountry == 1,
+                                 ifelse(EBAbank == 1,Shortfall.RW, 0), NA))%>%
+  right_join(pre.treat.out,  by = c("bvdid"), suffix = c("",".pre")) %>%
+  right_join(post.treat.out, by = c("bvdid"), suffix = c("",".post")) %>%
+    filter(EBAcountry == 1,
+           name != "UniCredit",
+           name != "Bank of Cyprus") %>%
+  mutate(Shortfall.mn   = log(1+Shortfall.mn), 
+         Shortfall.mn.2 = ifelse(EBAbank == 1,Shortfall.mn, 0),
+         Shortfall.RW.2 = ifelse(EBAbank == 1,Shortfall.RW, 0),
+         out.RWA.total  = log.RWA.total.post - log.RWA.total.pre,
+         out.RWA.other  = log.RWA.other.post - log.RWA.other.pre,
+         out.RWA.credit = log.RWA.credit.post - log.RWA.credit.pre,
+         out.RWA.IRB    = log.RWA.IRB.post - log.RWA.IRB.pre,
+         out.RWA.SA     = log.RWA.SA.post - log.RWA.SA.pre,
+         out.RWA.hat    = log.RWA.hat.post - log.RWA.hat.pre,
+         out.RWA.s      = log.RWA.s.post - log.RWA.s.pre,
+         out.K          = log.K.post - log.K.pre,
+         out.tier       = log.tier.post - log.tier.pre,
+         out.CAR.ratio  = totalcapitalratio.post - totalcapitalratio.pre,
+         out.tier.ratio = tier1ratio.post - tier1ratio.pre,
+         out.CAR.dif    = CAR.dif.post - CAR.dif.pre,
+         out.tier.dif   = tier.dif.post - tier.dif.pre,
+         Country        = as.factor(Country)) %>% 
+  ungroup() %>% 
+  mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
+
+```
+```{r, include=FALSE}
+ggplot(DiD.data, aes(x= EBAbank, y =  out.tier.ratio)) + geom_point() +geom_smooth(method = "lm")
+```
 
 ```{r, include=FALSE}
-
-
-DiD.data <- DiD.data %>% ungroup() %>% 
-  mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE) 
   
-DiD.intensity <- felm(outcome ~ Shortfall.RW | Country |0|0,
+reg.1 <- felm(out.RWA.s ~ Shortfall.mn.2 | 0 |0|0,
                   data = DiD.data)
+se.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
 
-DiD.intensity.2 <- felm(outcome ~ Shortfall.RW.2 | Country |0|0,
+reg.2 <- felm(out.RWA.s ~ Shortfall.mn.2 
+                 + log.asset + deposit.ratio + loans.ratio + NII.ratio + income.ratio| 0 |0|0,
                   data = DiD.data)
+se.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
 
-DiD.dummy <- felm(outcome ~ EBAbank | Country |0|0,
-                  data = subset(DiD.data, subset = EBAcountry == 1))
+reg.3 <- felm(out.RWA.s ~ Shortfall.mn.2 
+                 + log.asset + deposit.ratio + loans.ratio + NII.ratio + income.ratio| Country |0|0,
+                  data = DiD.data)
+se.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+
+reg.4 <- felm(out.RWA.total ~ Shortfall.mn.2 
+                 | 0 |0|0,
+                  data = DiD.data)
+se.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(out.RWA.hat ~ Shortfall.mn.2 
+                 | 0 |0|0,
+                  data = DiD.data)
+se.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(out.CAR.ratio ~ Shortfall.mn.2 
+                 | 0 |0|0,
+                  data = DiD.data)
+se.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(out.tier.ratio ~ Shortfall.mn.2 
+                 | 0 |0|0,
+                  data = DiD.data)
+se.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
+
 
 ```
 
 ```{r, fig.height = 10, fig.width = 7, results="asis", out.width = "1\\textwidth", cache = FALSE, warning=FALSE, message=FALSE}
 
-stargazer( DiD.intensity.2, DiD.dummy,
+stargazer(reg.1, reg.4, reg.5, reg.6, reg.7,
           header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
           title = "EBA capital exercise and Capital Savings",
           table.layout = "n=d#-t-as-",
-          notes = "\\parbox[t]{7cm}{The table shows the estimates for the following model: \\newline \\begin{equation*}\\text{Capital savings}_i = \\beta X_i+\\varepsilon_i. \\end{equation*} \\newline The dependent variable in each regression is the measure of capital savings. In column (1) the regressor is the capital shortfall during the capital exercise and in column (2) a dummy that indicates if bank $i$ was part of the exercise.}", 
+          notes = "\\parbox[t]{20cm}{The table shows the estimates for the following model: \\newline \\begin{equation*}\\Delta Y_i = \\alpha + \\beta \\text{Capital Shortfall}_i +\\varepsilon_i \\end{equation*} \\newline The dependent variable in each regression is the measure of capital savings. The regressor is the capital shortfall during the capital exercise. Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}", 
+          dep.var.labels = c("$\\Delta$ Log RWA savings", "$\\Delta$ Log RWA", "$\\Delta$ Log RWA average", "$\\Delta$ Capital ratio", "$\\Delta$ CET1 ratio"),
+          se = list(se.1, se.4, se.5, se.6, se.7),
+          covariate.labels = c("Log Capital Shortfall"),
           notes.label = "",
           notes.align = "c", 
           notes.append = FALSE,
           label = "",
           style = "qje",
-          dep.var.labels = c("Capital savings"), column.sep.width = "2pt",
-          covariate.labels = c( "Shortfall","EBA dummy"),
-          add.lines = list(c("Country FE","Yes","Yes")))
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Country FE", "\\multicolumn{1}{c}{No}", "\\multicolumn{1}{c}{No}",    
+                             "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+
+```   
+```{r, include=FALSE}
+  
+reg.1 <- felm(out.RWA.s ~ EBAbank | 0 |0|0,
+                  data = DiD.data)
+se.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(out.RWA.s ~ EBAbank 
+                 + log.asset + deposit.ratio + loans.ratio + NII.ratio + income.ratio| 0 |0|0,
+                  data = DiD.data)
+se.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(out.RWA.s ~ EBAbank 
+                 + log.asset + deposit.ratio + loans.ratio + NII.ratio + income.ratio| Country |0|0,
+                  data = DiD.data)
+se.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
 
 
+reg.4 <- felm(out.RWA.total ~ EBAbank 
+                 | 0 |0|0,
+                  data = DiD.data)
+se.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(out.RWA.hat ~ EBAbank 
+                 | 0 |0|0,
+                  data = DiD.data)
+se.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(out.CAR.ratio ~ EBAbank 
+                 | 0 |0|0,
+                  data = DiD.data)
+se.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(out.tier.ratio ~ EBAbank 
+                 | 0 |0|0,
+                  data = DiD.data)
+se.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
+
+
+```
+
+```{r, fig.height = 10, fig.width = 7, results="asis", out.width = "1\\textwidth", cache = FALSE, warning=FALSE, message=FALSE}
+
+stargazer(reg.1, reg.4, reg.5, reg.6, reg.7,
+          header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "EBA capital exercise and Capital Savings: Exercise vs Non-exercise banks",
+          table.layout = "n=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows the estimates for the following model: \\newline \\begin{equation*}\\Delta Y_i =\\alpha +  \\beta \\text{Capital Shortfall}_i+\\varepsilon_i \\end{equation*} \\newline The dependent variable in each regression is the measure of capital savings. The regressor is a dummy that indicates if bank $i$ was part of the exercise. Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}", 
+          dep.var.labels = c("$\\Delta$ Log RWA savings", "$\\Delta$ Log RWA", "$\\Delta$ Log RWA average", "$\\Delta$ Capital ratio", "$\\Delta$ CET1 ratio"),
+          se = list(se.1, se.4, se.5, se.6, se.7),
+          covariate.labels = c("EBA"),
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Country FE", "\\multicolumn{1}{c}{No}", "\\multicolumn{1}{c}{No}",    
+                             "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
 
 ```   
 
 
 
-
 ```{r, echo=FALSE}
-
-
-bank.data <- bank.data %>% ungroup()%>%
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+bank.data.2 <- bank.data %>% ungroup()%>%
   filter(!is.na(RW.s),
          !is.na(basel),
          tier1capitalmillcu < totalcapitalmillcu)%>%
-  mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE) 
+  select(bvdid, IRB.bvdid, year, IRB, Country, log.RWA.s, log.RWA.hat, CAR.dif,
+         totalcapitalratio, tier1ratio, ROE, ROA, Zscore, leverage, log.RWA.total, log.tier,log.K,
+         income.ratio, deposit.ratio, loans.ratio, log.asset, NII.ratio)%>%
+  group_by(bvdid) %>%
+#  mutate_at(vars(log.RWA.s:NII.ratio), funs(. - lag(., order_by=year))) %>%
+ ungroup() %>%
+ mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
 
-stage1 <- felm(data = bank.data , RW.s ~ basel + IRB  |  year +bvdid  |0|0)
-se.s1 <- summary(stage1, robust=TRUE)$coefficients[,2]
+reg.1 <- felm(totalcapitalratio  ~ CAR.dif | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
 
-bank.data <- mutate(bank.data, f.RW.s = stage1$fitted.values )
+reg.2 <- felm(log.K  ~ CAR.dif  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
 
-iv.t1 <- felm(data = bank.data ,tier1ratio  ~ f.RW.s  | year + bvdid|0|0)
-#se.s1 <- summary(iv.t1$stage1,robust=TRUE)$coefficients[,2]
-se.iv.t1 <- summary(iv.t1,robust=TRUE)$coefficients[,2]
+reg.3 <- felm(log.RWA.total  ~ CAR.dif  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
 
-iv.roe <- felm(data = bank.data ,ROE  ~ f.RW.s  | year + bvdid|0|0)
-se.iv.roe <- summary(iv.roe,robust=TRUE)$coefficients[,2]
+reg.4 <- felm(ROE  ~ CAR.dif  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
 
-iv.z <- felm(data = bank.data , Zscore  ~ f.RW.s  | year + bvdid|0|0)
-se.iv.z <- summary(iv.z,robust=TRUE)$coefficients[,2]
+reg.5 <- felm(ROA  ~ CAR.dif  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
 
-iv.roa <- felm(data = bank.data , ROA  ~ f.RW.s  | year + bvdid|0|0)
-se.iv.roa <- summary(iv.roa,robust=TRUE)$coefficients[,2]
+reg.6 <- felm(Zscore  ~ CAR.dif | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
 
-iv.sroa <- felm(data = bank.data , r.sd.ROA  ~ f.RW.s  | year + bvdid|0|0)
-se.iv.sroa <- summary(iv.sroa,robust=TRUE)$coefficients[,2]
+reg.7 <- felm(leverage  ~ CAR.dif  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
 
-iv.lev <- felm(data = bank.data , leverage  ~ f.RW.s  | year + bvdid|0|0)
-se.iv.lev <- summary(iv.lev,robust=TRUE)$coefficients[,2]
-
-F.test <- round(t(sapply(stage1$lhs, function(lh) waldtest(stage1, ~ basel + IRB, lhs=lh)))[,5],1)
-
-
-
-F.test <- c("F-test",as.character(F.test),"","","","","","","")
-
+```
+```{r, include=FALSE}
+ggplot(bank.data, aes(x= log.RWA.s, y =  tier1ratio)) + geom_point() +geom_smooth(method = "lm")
 ```
 
 ```{r,eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
 
 
-stargazer(stage1, iv.t1, iv.roe, iv.roa, iv.z, iv.sroa, iv.lev, 
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6, reg.7, 
            header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
-          title = "Instrumental variable analysis",
+          title = "Capital Ratio Savings and Bank Characteristics",
           table.layout = "n=c=d#-t-as-",
-          notes = "\\parbox[t]{15cm}{The table shows the relationship between the measure of capital savings and several outcome variables instrumented by the introduction of Basel (at country level) and IRB (at bank level).}",
-          se = list(se.s1, se.iv.t1, se.iv.roe, se.iv.z, se.iv.roa, se.iv.sroa, se.iv.lev),
-          covariate.labels = c("Basel","IRB","Savings"),
-          dep.var.labels = c("Savings","CET1","ROE","ROA", "Z-score", "sd(ROA)","Leverage"), 
+          notes = "\\parbox[t]{20cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Y}_{it} = \\beta\\times \\text{Capital ratio savings}_{it}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{it}. \\end{equation*} \\newline The first line of the table show the dependent variable in each regression. $\\text{CT1 ratio savings}_{it}$ is the difference between the counterfactual (without savings) and actual total capital ratio. $\\text{IRB share}_{it}$ is the share of bank i portfolio under the internal-ratings based approach.  Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          se = list(se.reg.1, se.reg.2, se.reg.3, se.reg.4, se.reg.5, se.reg.6, se.reg.7),
+          covariate.labels = c("Capital ratio savings", "IRB share","CT1 savings $\\times$ IRB share"),
+          dep.var.labels = c("Capital ratio","Log Capital","Log RWA","ROE","ROA","Z-score","Leverage"), 
           notes.label = "",
           notes.align = "c", 
           notes.append = FALSE,
           label = "",
           style = "qje",
-          column.labels   = c("First stage", "Second stage"), 
-          column.separate = c(1, 6),
           column.sep.width = "3pt",
-          add.lines = list(c("Bank FE", "Yes", "Yes","Yes", "Yes", "Yes", "Yes", "Yes"),
-                           c("Year FE", "Yes", "Yes","Yes", "Yes", "Yes", "Yes", "Yes"),
-                           F.test))
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Bank FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}"),
+                           c("Year FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+```
+```{r, echo=FALSE}
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+bank.data.2 <- bank.data %>% ungroup()%>%
+  filter(!is.na(RW.s),
+         !is.na(basel),
+         tier1capitalmillcu < totalcapitalmillcu)%>%
+  select(bvdid, IRB.bvdid, year, IRB, Country, log.RWA.s, log.RWA.hat, CAR.dif,
+         totalcapitalratio, tier1ratio, ROE, ROA, Zscore, leverage, log.RWA.total, log.tier, log.K,
+         income.ratio, deposit.ratio, loans.ratio, log.asset, NII.ratio)%>%
+  group_by(bvdid) %>%
+#  mutate_at(vars(log.RWA.s:NII.ratio), funs(. - lag(., order_by=year))) %>%
+ ungroup() %>%
+ mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
+
+reg.1 <- felm(totalcapitalratio  ~ CAR.dif  | year + IRB.bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(log.K  ~ CAR.dif  | year +  IRB.bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(log.RWA.total  ~ CAR.dif  | year +  IRB.bvdid    | 0 | 0 , data = bank.data.2)
+se.reg.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+reg.4 <- felm(ROE  ~ CAR.dif | year +  IRB.bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(ROA  ~ CAR.dif  | year +  IRB.bvdid    | 0 | 0 , data = bank.data.2)
+se.reg.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(Zscore  ~ CAR.dif  | year +IRB.bvdid    | 0 | 0 , data = bank.data.2)
+se.reg.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(leverage  ~ CAR.dif  | year  + IRB.bvdid    | 0 | 0 , data = bank.data.2)
+se.reg.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
 
 ```
-```{r, echo=FALSE, include=FALSE}
-
-reg.hdfe1 <- felm(tier1ratio  ~ RW.s | 0  |0|0,
-                  data = bank.data)
-
-reg.hdfe2 <- felm(tier1ratio  ~ RW.s  | bvdid + year  |0|0,
-                  data = bank.data)
-
-
-reg.hdfe3 <- felm(Zscore  ~ RW.s  | 0  |0|0,
-                  data = bank.data)
-
-reg.hdfe4 <- felm(Zscore  ~ RW.s  | bvdid + year  |0|0,
-                  data = bank.data)
-
+```{r, include=FALSE}
+ggplot(bank.data, aes(x= log.RWA.s, y =  tier1ratio)) + geom_point() +geom_smooth(method = "lm")
 ```
 
+```{r,eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
 
-```{r, fig.height = 10, fig.width = 7, results="asis", out.width = "1\\textwidth", cache = FALSE, warning=FALSE, message=FALSE, include=FALSE, eval=FALSE}
 
-stargazer(reg.hdfe1,reg.hdfe2,reg.hdfe3,reg.hdfe4,
-          header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
-          title = "Capital Savings and Capital Requirement Ratio",
-          table.layout = "n=d#-t-as-",
-          notes = "\\parbox[t]{10cm}{The table shows the relationship between the measure of capital savings and risk-weighted capital ratio. The dependent variable in each regression is the Core Tier 1 ratio. In column (2) and (3) I control for asset size, tier one capital size, and mean PD. In regressions (3) I also include bank and year fixed effects.}", 
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6, reg.7, 
+           header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "Capital Ratio Savings and Bank Characteristics: Bank $\\times$ IRB Fixed effects",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Y}_{it} = \\beta \\times\\text{Capital ratio savings}_{it}+\\alpha_{i}\\times\\text{IRB}_{it}+\\alpha_{t}+\\varepsilon_{it}. \\end{equation*} \\newline The first line of the table show the dependent variable in each regression. $\\text{Capital ratio savings}_{it}$ is the difference between the counterfactual (without savings) and actual total capital ratio. $\\text{IRB share}_{it}$ is the share of bank i portfolio under the internal-ratings based approach.  Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          se = list(se.reg.1, se.reg.2, se.reg.3, se.reg.4, se.reg.5, se.reg.6, se.reg.7),
+          covariate.labels = c("Capital ratio savings", "IRB share","CT1 savings $\\times$ IRB share"),
+          dep.var.labels = c("Capital ratio","Log Capital","Log RWA","ROE","ROA","Z-score","Leverage"), 
           notes.label = "",
           notes.align = "c", 
           notes.append = FALSE,
           label = "",
           style = "qje",
-          dep.var.labels = c("CT1 ratio"), column.sep.width = "2pt",
-          add.lines = list(c("Year FE", "No", "No","Yes"),
-                           c("Bank FE","No", "No","Yes")))
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Bank FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}"),
+                           c("Year FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+```
 
 
 
-```   
+```{r, echo=FALSE}
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+bank.data.2 <- bank.data %>% ungroup()%>%
+  filter(!is.na(RW.s),
+         !is.na(basel),
+         tier1capitalmillcu < totalcapitalmillcu)%>%
+  select(bvdid, IRB.bvdid, year, IRB, Country, log.RWA.s, log.RWA.hat, CAR.dif,
+         totalcapitalratio, tier1ratio, ROE, ROA, Zscore, leverage, log.RWA.total, log.tier, log.K,
+         income.ratio, deposit.ratio, loans.ratio, log.asset, NII.ratio)%>%
+  group_by(bvdid) %>%
+#  mutate_at(vars(log.RWA.s:NII.ratio), funs(. - lag(., order_by=year))) %>%
+ ungroup() %>%
+ mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
+
+reg.1 <- felm(totalcapitalratio  ~ CAR.dif + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(log.K  ~ CAR.dif + IRB  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(log.RWA.total  ~ CAR.dif + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+reg.4 <- felm(ROE  ~ CAR.dif + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(ROA  ~ CAR.dif + IRB  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(Zscore  ~ CAR.dif + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(leverage  ~ CAR.dif + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
+
+```
+```{r, include=FALSE}
+ggplot(bank.data, aes(x= log.RWA.s, y =  tier1ratio)) + geom_point() +geom_smooth(method = "lm")
+```
+
+```{r,eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
 
 
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6, reg.7, 
+           header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "Capital Ratio Savings and Bank Characteristics: IRB vs Non-IRB Banks",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Y}_{it} = \\beta \\times\\text{Capital ratio savings}_{it}+\\gamma\\text{IRB}_{it}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{it}. \\end{equation*} \\newline The first line of the table show the dependent variable in each regression. $\\text{Capital ratio savings}_{it}$ is the difference between the counterfactual (without savings) and actual total capital ratio. $\\text{IRB share}_{it}$ is the share of bank i portfolio under the internal-ratings based approach.  Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          se = list(se.reg.1, se.reg.2, se.reg.3, se.reg.4, se.reg.5, se.reg.6, se.reg.7),
+          covariate.labels = c("Capital ratio savings", "IRB","CT1 savings $\\times$ IRB share"),
+          dep.var.labels = c("Capital ratio","Log Capital","Log RWA","ROE","ROA","Z-score","Leverage"), 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Bank FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}"),
+                           c("Year FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+```
 
 
+```{r, echo=FALSE}
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+bank.data.2 <- bank.data %>% ungroup()%>%
+  filter(!is.na(RW),
+         !is.na(basel),
+         tier1capitalmillcu < totalcapitalmillcu)%>%
+  select(bvdid, IRB.bvdid, year, IRB, Country, log.RWA.s, log.RWA.hat, CAR.dif, tier.dif, 
+         totalcapitalratio, tier1ratio, ROE, ROA, Zscore, leverage, log.RWA.total, log.tier, log.K,
+         income.ratio, deposit.ratio, loans.ratio, log.asset, NII.ratio)%>%
+  group_by(bvdid) %>%
+#  mutate_at(vars(log.RWA.s:NII.ratio), funs(. - lag(., order_by=year))) %>%
+ ungroup() %>%
+ mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
 
+reg.1 <- felm(totalcapitalratio  ~ CAR.dif  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(log.K  ~ CAR.dif  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(log.RWA.total  ~ CAR.dif  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+reg.4 <- felm(ROE  ~ CAR.dif | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(ROA  ~ CAR.dif  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(Zscore  ~ CAR.dif  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(leverage  ~ CAR.dif  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
+
+```
+```{r, include=FALSE}
+ggplot(bank.data, aes(x= log.RWA.s, y =  tier1ratio)) + geom_point() +geom_smooth(method = "lm")
+```
+
+```{r,eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6, reg.7, 
+           header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "Capital Ratio Savings and Bank Characteristics: Only IRB Banks",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Y}_{it} = \\beta \\times \\text{Capital ratio savings}_{it}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{it}. \\end{equation*} \\newline The first line of the table show the dependent variable in each regression. $\\text{Capital ratio savings}_{it}$ is the difference between the counterfactual (without savings) and actual total capital ratio. Only banks that use the IRB approach are included in these regressions.  Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          se = list(se.reg.1, se.reg.2, se.reg.3, se.reg.4, se.reg.5, se.reg.6, se.reg.7),
+          covariate.labels = c("Capital ratio savings", "IRB share","CT1 savings $\\times$ IRB share"),
+          dep.var.labels = c("Capital ratio","Log Capital","Log RWA","ROE","ROA","Z-score","Leverage"), 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Bank FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}"),
+                           c("Year FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+```
+
+```{r, echo=FALSE}
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+bank.data.2 <- bank.data %>% ungroup()%>%
+  filter(!is.na(RW.s),
+         !is.na(basel),
+         tier1capitalmillcu < totalcapitalmillcu)%>%
+  select(bvdid, IRB.bvdid, year, IRB, Country, log.RWA.s, log.RWA.hat, 
+         totalcapitalratio, tier1ratio, ROE, ROA, Zscore, leverage, log.RWA.total, log.tier, log.K,
+         income.ratio, deposit.ratio, loans.ratio, log.asset, NII.ratio)%>%
+  group_by(bvdid) %>%
+#  mutate_at(vars(log.RWA.s:NII.ratio), funs(. - lag(., order_by=year))) %>%
+ ungroup() %>%
+ mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
+
+reg.1 <- felm(totalcapitalratio  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(log.K  ~ log.RWA.s  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(log.RWA.total  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+reg.4 <- felm(ROE  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(ROA  ~ log.RWA.s  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(Zscore  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(leverage  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
+
+```
+```{r, include=FALSE}
+ggplot(bank.data, aes(x= log.RWA.s, y =  tier1ratio)) + geom_point() +geom_smooth(method = "lm")
+```
+
+```{r,eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6, reg.7, 
+           header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "RWA Savings and Bank Characteristics",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Y}_{it} = \\beta\\times \\text{Log RWA savings}_{it}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{it}. \\end{equation*} \\newline The first line of the table show the dependent variable in each regression. $\\text{Log RWA savings}_{it}$ is the natural logarithm of risk-weighted assets savings. Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          se = list(se.reg.1, se.reg.2, se.reg.3, se.reg.4, se.reg.5, se.reg.6, se.reg.7),
+          covariate.labels = c("Log RWA savings", "IRB share","CT1 savings $\\times$ IRB share"),
+          dep.var.labels = c("Capital ratio","Log Capital","Log RWA","ROE","ROA","Z-score","Leverage"), 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Bank FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}"),
+                           c("Year FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+```
+```{r, echo=FALSE}
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+bank.data.2 <- bank.data %>% ungroup()%>%
+  filter(!is.na(RW.s),
+         !is.na(basel),
+         tier1capitalmillcu < totalcapitalmillcu)%>%
+  select(bvdid, IRB.bvdid, year, IRB, Country, log.RWA.s, log.RWA.hat, 
+         totalcapitalratio, tier1ratio, ROE, ROA, Zscore, leverage, log.RWA.total, log.tier, log.K ,
+         income.ratio, deposit.ratio, loans.ratio, log.asset, NII.ratio)%>%
+  group_by(bvdid) %>%
+#  mutate_at(vars(log.RWA.s:NII.ratio), funs(. - lag(., order_by=year))) %>%
+ ungroup() %>%
+ mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
+
+reg.1 <- felm(totalcapitalratio  ~ log.RWA.s  | year + IRB.bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(log.K   ~ log.RWA.s  | year +  IRB.bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(log.RWA.total  ~ log.RWA.s  | year +  IRB.bvdid    | 0 | 0 , data = bank.data.2)
+se.reg.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+reg.4 <- felm(ROE  ~ log.RWA.s  | year +  IRB.bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(ROA  ~ log.RWA.s  | year +  IRB.bvdid    | 0 | 0 , data = bank.data.2)
+se.reg.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(Zscore  ~ log.RWA.s  | year +IRB.bvdid    | 0 | 0 , data = bank.data.2)
+se.reg.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(leverage  ~ log.RWA.s  | year  + IRB.bvdid    | 0 | 0 , data = bank.data.2)
+se.reg.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
+
+```
+```{r, include=FALSE}
+ggplot(bank.data, aes(x= log.RWA.s, y =  tier1ratio)) + geom_point() +geom_smooth(method = "lm")
+```
+
+```{r,eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6, reg.7, 
+           header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "RWA Savings and Bank Characteristics: Bank $\\times$ IRB Fixed effects",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Y}_{it} = \\beta\\times \\text{Log RWA savings}_{it}+\\alpha_{i}\\times IRB_{it}+\\alpha_{t}+\\varepsilon_{it}. \\end{equation*} \\newline The first line of the table show the dependent variable in each regression. $\\text{Log RWA savings}_{it}$ is the natural logarithm of risk-weighted assets savings. $\\text{IRB}_{it}$ is a dummy variable equal to 1 if bank i at year t used the IRB approach to calculate capital requirements and zero otherwise.  Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          se = list(se.reg.1, se.reg.2, se.reg.3, se.reg.4, se.reg.5, se.reg.6, se.reg.7),
+          covariate.labels = c("Log RWA savings", "IRB share","CT1 savings $\\times$ IRB share"),
+          dep.var.labels = c("Capital ratio","Log Capital","Log RWA","ROE","ROA","Z-score","Leverage"), 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Bank $\\times$ IRB FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}"),
+                           c("Year FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+```
+
+
+```{r, echo=FALSE}
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+bank.data.2 <- bank.data %>% ungroup()%>%
+  filter(!is.na(RW.s),
+         !is.na(basel),
+         tier1capitalmillcu < totalcapitalmillcu)%>%
+  select(bvdid, IRB.bvdid, year, IRB, Country, log.RWA.s, log.RWA.hat, 
+         totalcapitalratio, tier1ratio, ROE, ROA, Zscore, leverage, log.RWA.total, log.tier, log.K ,
+         income.ratio, deposit.ratio, loans.ratio, log.asset, NII.ratio)%>%
+  group_by(bvdid) %>%
+#  mutate_at(vars(log.RWA.s:NII.ratio), funs(. - lag(., order_by=year))) %>%
+ ungroup() %>%
+ mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
+
+reg.1 <- felm(totalcapitalratio  ~ log.RWA.s + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(log.K  ~ log.RWA.s + IRB  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(log.RWA.total  ~ log.RWA.s + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+reg.4 <- felm(ROE  ~ log.RWA.s + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(ROA  ~ log.RWA.s + IRB  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(Zscore  ~ log.RWA.s + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(leverage  ~ log.RWA.s + IRB  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
+
+```
+```{r, include=FALSE}
+ggplot(bank.data, aes(x= log.RWA.s, y =  tier1ratio)) + geom_point() +geom_smooth(method = "lm")
+```
+
+```{r,eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6, reg.7, 
+           header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "RWA Savings and Bank Characteristics: IRB vs Non-IRB Banks",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Y}_{it} = \\beta\\times \\text{Log RWA savings}_{it}+\\gamma\\times\\text{IRB}_{it}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{it}. \\end{equation*} \\newline The first line of the table show the dependent variable in each regression. $\\text{Log RWA savings}_{it}$ is the natural logarithm of risk-weighted assets savings. $\\text{IRB}_{it}$ is a dummy variable equal to 1 if bank i at year t used the IRB approach to calculate capital requirements and zero otherwise.  Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          se = list(se.reg.1, se.reg.2, se.reg.3, se.reg.4, se.reg.5, se.reg.6, se.reg.7),
+          covariate.labels = c("Log RWA savings", "IRB","CT1 savings $\\times$ IRB share"),
+          dep.var.labels = c("Capital ratio","Log Capital","Log RWA","ROE","ROA","Z-score","Leverage"), 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Bank FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}"),
+                           c("Year FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+```
+
+
+```{r, echo=FALSE}
+p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+bank.data.2 <- bank.data %>% ungroup()%>%
+  filter(!is.na(RW),
+         !is.na(basel),
+         tier1capitalmillcu < totalcapitalmillcu)%>%
+  select(bvdid, IRB.bvdid, year, IRB, Country, log.RWA.s, log.RWA.hat, 
+         totalcapitalratio, tier1ratio, ROE, ROA, Zscore, leverage, log.RWA.total, log.tier, log.K,
+         income.ratio, deposit.ratio, loans.ratio, log.asset, NII.ratio)%>%
+  group_by(bvdid) %>%
+#  mutate_at(vars(log.RWA.s:NII.ratio), funs(. - lag(., order_by=year))) %>%
+ ungroup() %>%
+ mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
+
+reg.1 <- felm(totalcapitalratio  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(log.K  ~ log.RWA.s  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(log.RWA.total  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+reg.4 <- felm(ROE  ~ log.RWA.s | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(ROA  ~ log.RWA.s  | year + bvdid  | 0 | 0 , data = bank.data.2)
+se.reg.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(Zscore  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
+
+reg.7 <- felm(leverage  ~ log.RWA.s  | year + bvdid   | 0 | 0 , data = bank.data.2)
+se.reg.7 <- summary(reg.7,robust=TRUE)$coefficients[,2]
+
+```
+```{r, include=FALSE}
+ggplot(bank.data, aes(x= log.RWA.s, y =  tier1ratio)) + geom_point() +geom_smooth(method = "lm")
+```
+
+```{r,eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6, reg.7, 
+           header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "RWA Savings and Bank Characteristics: only IRB",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Y}_{it} = \\beta\\times \\text{Log RWA savings}_{it}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{it}. \\end{equation*} \\newline The first line of the table show the dependent variable in each regression. $\\text{Log RWA savings}_{it}$ is the natural logarithm of risk-weighted assets savings. The sample is restricted to banks that use the IRB approach to compute their capital requirements.  Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          se = list(se.reg.1, se.reg.2, se.reg.3, se.reg.4, se.reg.5, se.reg.6, se.reg.7),
+          covariate.labels = c("Log RWA savings", "IRB share","CT1 savings $\\times$ IRB share"),
+          dep.var.labels = c("Capital ratio","Log Capital","Log RWA","ROE","ROA","Z-score","Leverage"), 
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Bank FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}"),
+                           c("Year FE", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+```

@@ -49,14 +49,22 @@ PD_2_sd <- sd(PD_2)
 mapping_wholesale <- function(PD,LGD,M,alpha,portfolio){
   R  <- 0.12*(1-exp(-50*PD))/(1-exp(-50))+0.24*(1-(1-exp(-50*PD))/(1-exp(-50)))
   b  <- (0.11852-0.05478*log(PD))^2
-  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)*((1-1.5*b)^-1*(1+(M-2.5)*b))
+  K  <- LGD*(punif(((1-R)^(-0.5))*qunif(PD)+((R/(1-R))^(0.5))*qunif(alpha))-PD)*((1-1.5*b)^-1*(1+(M-2.5)*b))
   RW <- K*12.5
   data <- data.frame(K,RW,PD,LGD,M,R,portfolio)
   return(data)
 }
 
+
 mapping_retail <- function(PD,LGD,R,alpha,portfolio){
-  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha)))
+  RW <- K*12.5
+  data <- data.frame(K,RW,PD,LGD,M,R,portfolio)
+  return(data)
+}
+
+mapping_retail_alt <- function(PD,LGD,R,alpha,portfolio){
+  K  <- LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qunif(alpha)))
   RW <- K*12.5
   data <- data.frame(K,RW,PD,LGD,M,R,portfolio)
   return(data)
@@ -71,9 +79,24 @@ mapping_other_retail <- function(PD,LGD,alpha,portfolio){
 }
 ```
 
+```{r wholesale vs retail, echo=FALSE}
+data <- mapping_retail(grid,0.45,0.15,0.999,factor("Mortgage"))
+data <- rbind(data,mapping_retail_alt(grid,0.45,0.15,0.999,factor("Mortgage_alt")))
 
 
+p <- ggplot(data = subset(data,subset = PD <1),
+            mapping = aes(x = PD, y=K, colour = portfolio)) 
+p + geom_line(alpha = 1) + 
+  labs(x = "PD", 
+         y = "Capital requirement per unit of exposure",title = "Figure 1: Wholesale vs Retail") +
+  theme_bw()
+```
 
+Concavity of RW formula: highly driven by Normality assumption. 
+
+Findings so far: 
+
+- Fatter-tailed distribution of systematic component lead to less concavity (uniform distribution used, tes with others)
 
 ```{r wholesale vs retail, echo=FALSE}
 data <- mapping_wholesale(grid,0.45,2.5,0.999,factor("Corporate"))

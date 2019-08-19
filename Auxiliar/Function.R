@@ -13,7 +13,7 @@ mapping_wholesale <- function(PD, LGD = 0.45, M = 2.5, alpha = 0.999){
   R   <- 0.12*(1-exp(-50*PD))/(1-exp(-50))+0.24*(1-(1-exp(-50*PD))/(1-exp(-50)))
   b   <- (0.11852-0.05478*log(PD))^2
   f   <- 1.06*LGD*(pnorm(((1-R)^(-0.5))*qnorm(PD)+((R/(1-R))^(0.5))*qnorm(alpha))-PD)
-  K   <- f*((1-1.5*b)^-1*(1+(M-2.5)*b))
+  K   <- f*((1+(M-2.5)*b)/(1-1.5*b))
   RW  <- K*12.5
   data <- data.frame(K,RW,PD,LGD,M,R,b,f)
   return(data)

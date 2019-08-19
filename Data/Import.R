@@ -122,8 +122,8 @@ bankscope <- bankscope %>%
   mutate_at(c(grep("usd", names(bankscope))[1]:ncol(bankscope)),as.numeric) %>%
   # Convert to USD
   rowwise() %>%
-  mutate_at(c(grep("lcu$", names(bankscope))[1]:ncol(bankscope)),
-            funs(prod(.,exchangeratefromoriginalcurrencyusd, na.rm = TRUE))) %>%
+  mutate_at(c(grep("lcu$", names(bankscope))),
+            funs(.*exchangeratefromoriginalcurrencyusd)) %>%
   # Add Basel 2 country level introduction year
   ungroup() %>%
   left_join(basel.indicator, by = c("Country")) %>%
