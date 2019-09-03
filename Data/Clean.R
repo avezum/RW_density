@@ -198,6 +198,31 @@ bank.data <- IRB.data %>%
   right_join(bank.data,by=c("bvdid","name","Country","year"))
 }
 
+## Aggregated IRB exposures at bank-portfolio-year level 
+for(i in c("Corporate","Sovereign","Banks")) {
+  bank.data <- IRB.data %>% 
+    group_by(name,bvdid,Country,year,Portfolio_1,Portfolio_2) %>%
+    filter(Portfolio_2 %in% c(i)) %>%
+    summarize(!!(paste(       "gini",        i, sep=".")) := DescTools::Gini(PD,w.EAD, na.rm = TRUE),
+              !!(paste("sd"  ,"PD"  ,        i, sep=".")) := sd(PD)*100,
+              !!(paste("mean","PD"  ,        i, sep=".")) := weighted.mean(PD,w.EAD, na.rm = TRUE)*100,
+              !!(paste(       "RWA" ,        i, sep=".")) := sum(RWA, na.rm = TRUE),
+              !!(paste(       "RWA" , "hat", i, sep=".")) := sum(RWA.hat, na.rm = TRUE),
+              !!(paste(       "EAD" ,        i, sep=".")) := sum(EAD, na.rm = TRUE))%>%
+    ungroup()%>%
+    full_join(sample, by=c("bvdid","name","Country","year"))%>%
+    mutate(!!(paste("RW" ,"hat"    , i , sep=".")) := 100*get(paste("RWA","hat", i , sep="."))/get(paste("EAD", i , sep=".")),
+           !!(paste("RWA","s", i , sep=".")) := get(paste("RWA","hat", i, sep="."))-get(paste("RWA", i , sep=".")),
+           !!(paste("RW" ,"s", i , sep=".")) := 100*ifelse(get(paste("EAD", i, sep=".")) == 0, 0,
+                                                           get(paste("RWA","s", i , sep="."))/get(paste("EAD", i , sep="."))),
+           !!(paste("mean","RWA",        i, sep=".")) := mean(get(paste(        "RWA",        i, sep=".")), na.rm = TRUE),
+           !!(paste("mean","RWA", "hat", i, sep=".")) := mean(get(paste(        "RWA", "hat", i, sep=".")), na.rm = TRUE),
+           !!(paste("mean","EAD",        i, sep=".")) := mean(get(paste(        "EAD",        i, sep=".")), na.rm = TRUE),
+           !!(paste("mean","RWA", "s"  , i, sep=".")) :=      get(paste("mean", "RWA", "hat", i, sep="."))-get(paste("mean", "RWA", i, sep=".")),
+           !!(paste("mean","RW" , "hat", i, sep=".")) :=  100*get(paste("mean", "RWA", "hat", i, sep="."))/get(paste("mean", "EAD", i, sep="."))) %>%
+    right_join(bank.data,by=c("bvdid","name","Country","year"))
+}
+
 #------------------------------------------------------------------------------#
 # Basic cleaning and variable calculation                                      #
 #------------------------------------------------------------------------------#
@@ -235,6 +260,12 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           log.RWA.IRB    = log(1+RWA.IRB),
           log.RWA.s      = log(1+RWA.s),
           log.RWA.hat    = log(1+RWA.hat),
+          log.RWA.s.Wholesale = ifelse(EAD.IRB == 0 & IRB == 0, 0, log(1+RWA.s.Wholesale)),
+          log.RWA.s.Retail    = ifelse(EAD.IRB == 0 & IRB == 0, 0, log(1+RWA.s.Retail)),
+          log.RWA.s.Equity    = ifelse(EAD.IRB == 0 & IRB == 0, 0, log(1+RWA.s.Equity)),
+          log.RWA.s.Corporate = ifelse(EAD.IRB == 0 & IRB == 0, 0, log(1+RWA.s.Corporate)),
+          log.RWA.s.Sovereign = ifelse(EAD.IRB == 0 & IRB == 0, 0, log(1+RWA.s.Sovereign)),
+          log.RWA.s.Banks     = ifelse(EAD.IRB == 0 & IRB == 0, 0, log(1+RWA.s.Banks)),
           log.K          = log(1+totalcapitalmillcu),
           log.tier       = log(1+tier1capitalmillcu),
           # Control variables

@@ -63,7 +63,7 @@ library(lfe)                 ## High-dimensional fixed effects
 library(gridExtra)           ## Plot side-by-side
 library(DescTools)           ## Command to winsorize variables
 
-p_w <- c(0.01, 0.99)         ## Set winsorizing limits
+p_w <- c(0.0, 1)         ## Set winsorizing limits
 
 ```
 
@@ -596,7 +596,8 @@ pre.treat.out <- bank.data %>%
   filter(year %in% c("2009","2010"),
          !is.na(IRB)) %>%
   select(bvdid, log.RWA.total, log.RWA.other, log.RWA.credit, log.RWA.IRB, log.RWA.SA, log.RWA.hat, log.RWA.s,
-         log.K, log.tier, totalcapitalratio, tier1ratio, CAR.dif, tier.dif) %>%
+         log.RWA.s.Wholesale, log.RWA.s.Retail, log.RWA.s.Equity, log.RWA.s.Corporate, log.RWA.s.Sovereign,    
+         log.RWA.s.Banks, log.K, log.tier, totalcapitalratio, tier1ratio, CAR.dif, tier.dif) %>%
   group_by(bvdid) %>%
   summarize_if(is.numeric, funs(mean), na.rm = TRUE)
 
@@ -605,22 +606,18 @@ post.treat.out <- bank.data %>%
   filter(year %in% c("2012","2013"),
          !is.na(IRB)) %>%
   select(bvdid, log.RWA.total, log.RWA.other, log.RWA.credit, log.RWA.IRB, log.RWA.SA, log.RWA.hat, log.RWA.s,
-         log.K, log.tier, totalcapitalratio, tier1ratio, CAR.dif, tier.dif) %>%
+         log.RWA.s.Wholesale, log.RWA.s.Retail, log.RWA.s.Equity, log.RWA.s.Corporate, log.RWA.s.Sovereign,    
+         log.RWA.s.Banks, log.K, log.tier, totalcapitalratio, tier1ratio, CAR.dif, tier.dif) %>%
   group_by(bvdid) %>%
   summarize_if(is.numeric, funs(mean), na.rm = TRUE)
 
 DiD.data <- bank.data %>%
   filter(year %in% c("2010")) %>%
-  mutate(Shortfall.RW.2 = ifelse(EBAcountry == 1,
-                                 ifelse(EBAbank == 1,Shortfall.RW, 0), NA))%>%
   right_join(pre.treat.out,  by = c("bvdid"), suffix = c("",".pre")) %>%
   right_join(post.treat.out, by = c("bvdid"), suffix = c("",".post")) %>%
-    filter(EBAcountry == 1,
-           name != "UniCredit",
-           name != "Bank of Cyprus") %>%
   mutate(Shortfall.mn   = log(1+Shortfall.mn), 
-         Shortfall.mn.2 = ifelse(EBAbank == 1,Shortfall.mn, 0),
-         Shortfall.RW.2 = ifelse(EBAbank == 1,Shortfall.RW, 0),
+         Shortfall.mn.2 = ifelse(EBAcountry == 1, ifelse(EBAbank == 1,Shortfall.mn, 0), NA),
+         Shortfall.RW.2 = ifelse(EBAcountry == 1, ifelse(EBAbank == 1,Shortfall.RW, 0), NA),
          out.RWA.total  = log.RWA.total.post - log.RWA.total.pre,
          out.RWA.other  = log.RWA.other.post - log.RWA.other.pre,
          out.RWA.credit = log.RWA.credit.post - log.RWA.credit.pre,
@@ -628,6 +625,12 @@ DiD.data <- bank.data %>%
          out.RWA.SA     = log.RWA.SA.post - log.RWA.SA.pre,
          out.RWA.hat    = log.RWA.hat.post - log.RWA.hat.pre,
          out.RWA.s      = log.RWA.s.post - log.RWA.s.pre,
+         out.RWA.s.Retail = log.RWA.s.Retail.post - log.RWA.s.Retail.pre,
+         out.RWA.s.Equity = log.RWA.s.Equity.post - log.RWA.s.Equity.pre,
+         out.RWA.s.Wholesale = log.RWA.s.Wholesale.post - log.RWA.s.Wholesale.pre,
+         out.RWA.s.Corporate = log.RWA.s.Corporate.post - log.RWA.s.Corporate.pre,
+         out.RWA.s.Sovereign = log.RWA.s.Sovereign.post - log.RWA.s.Sovereign.pre,
+         out.RWA.s.Banks = log.RWA.s.Banks.post - log.RWA.s.Banks.pre,
          out.K          = log.K.post - log.K.pre,
          out.tier       = log.tier.post - log.tier.pre,
          out.CAR.ratio  = totalcapitalratio.post - totalcapitalratio.pre,
@@ -636,13 +639,63 @@ DiD.data <- bank.data %>%
          out.tier.dif   = tier.dif.post - tier.dif.pre,
          Country        = as.factor(Country)) %>% 
   ungroup() %>% 
+  filter(EBAcountry == 1,
+         name != "Bank of Cyprus") %>%
   mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)
 
 ```
 ```{r, include=FALSE}
-ggplot(DiD.data, aes(x= EBAbank, y =  out.tier.ratio)) + geom_point() +geom_smooth(method = "lm")
+ggplot(DiD.data, aes(x= Shortfall.mn, y =  out.RWA.s.Corporate)) + geom_point() +geom_smooth(method = "lm")
+```
+```{r, include=FALSE}
+  
+reg.1 <- felm(out.RWA.s ~ Shortfall.mn | 0 |0|0,
+                  data = DiD.data)
+se.1 <- summary(reg.1,robust=TRUE)$coefficients[,2]
+
+reg.2 <- felm(out.RWA.s.Retail ~ Shortfall.mn | 0 |0|0,
+                  data = DiD.data)
+se.2 <- summary(reg.2,robust=TRUE)$coefficients[,2]
+
+reg.3 <- felm(out.RWA.s.Wholesale ~ Shortfall.mn | 0 |0|0,
+                  data = DiD.data)
+se.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
+
+reg.4 <- felm(out.RWA.s.Corporate ~ Shortfall.mn | 0 |0|0,
+                  data = DiD.data)
+se.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
+
+reg.5 <- felm(out.RWA.s.Sovereign ~ Shortfall.mn | 0 |0|0,
+                  data = DiD.data)
+se.5 <- summary(reg.5,robust=TRUE)$coefficients[,2]
+
+reg.6 <- felm(out.RWA.s.Banks ~ Shortfall.mn | 0 |0|0,
+                  data = DiD.data)
+se.6 <- summary(reg.6,robust=TRUE)$coefficients[,2]
 ```
 
+```{r, fig.height = 10, fig.width = 7, results="asis", out.width = "1\\textwidth", cache = FALSE, warning=FALSE, message=FALSE}
+
+stargazer(reg.1, reg.2, reg.3, reg.4, reg.5, reg.6,
+          header = FALSE, type="latex", keep.stat = c("n","rsq"), font.size = "small",
+          title = "EBA capital exercise and Capital Savings",
+          table.layout = "n=d#-t-as-",
+          notes = "\\parbox[t]{20cm}{The table shows the estimates for the following model: \\newline \\begin{equation*}\\Delta Y_i = \\alpha + \\beta \\text{Capital Shortfall}_i +\\varepsilon_i \\end{equation*} \\newline The dependent variable in each regression is the measure of capital savings. The regressor is the capital shortfall during the capital exercise. Standard errors are adjusted for heteroskedasticity. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}", 
+          dep.var.labels = c("$\\Delta \\text{Log RWA}^S$", "$\\Delta \\text{Log RWA}^S_R$", "$\\Delta \\text{Log RWA}^S_W$", "$\\Delta \\text{Log RWA}^S_C$", "$\\Delta \\text{Log RWA}^S_S$", "$\\Delta \\text{Log RWA}^S_B$"),
+          se = list(se.1, se.2, se.3, se.4, se.5, se.6),
+          covariate.labels = c("Log Capital Shortfall"),
+          notes.label = "",
+          notes.align = "c", 
+          notes.append = FALSE,
+          label = "",
+          style = "qje",
+          column.sep.width = "3pt",
+          float.env = "sidewaystable",
+          align = TRUE,
+          add.lines = list(c("Country FE", "\\multicolumn{1}{c}{No}", "\\multicolumn{1}{c}{No}",    
+                             "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}", "\\multicolumn{1}{c}{Yes}")))
+
+```  
 ```{r, include=FALSE}
   
 reg.1 <- felm(out.RWA.s ~ Shortfall.mn.2 | 0 |0|0,
@@ -660,7 +713,7 @@ reg.3 <- felm(out.RWA.s ~ Shortfall.mn.2
 se.3 <- summary(reg.3,robust=TRUE)$coefficients[,2]
 
 
-reg.4 <- felm(out.RWA.total ~ Shortfall.mn.2 
+reg.4 <- felm(out.RWA.total ~ Shortfall.mn 
                  | 0 |0|0,
                   data = DiD.data)
 se.4 <- summary(reg.4,robust=TRUE)$coefficients[,2]
