@@ -15,7 +15,6 @@ library(data.table)   ## Command to bind lists
 library(reshape2)     ## Command to transform data from wide to long
 library(stringr)      ## Command to clean variables names in Orbis
 
-
 ##============================================================================##
 ## Auxiliar data                                                              ##
 ##============================================================================##
@@ -35,6 +34,30 @@ basel.indicator <- read_xlsx("Data/Raw/Pillar3/Auxiliar/Auxiliar.xlsx",sheet = 2
 # EBA capital exercise
 EBA.indicator <- read_xlsx("Data/Raw/Pillar3/Auxiliar/Auxiliar.xlsx",sheet = 3) %>%
   select(bvdid, EBAbank, EBAcountry, Shortfall.mn, Shortfall.RW)
+
+# Macro variables
+
+country.code <- read.csv("Data/Raw/WDI/WDICountry.csv") %>%
+  rename_all(tolower)%>%
+  select(country.code = ï..country.code,
+         Country = x2.alpha.code)
+
+WDI <- read.csv("Data/Raw/WDI/WDIData.csv") %>%
+  filter(Indicator.Code %in% c("NY.GDP.DEFL.ZS","NY.GDP.PCAP.KD")) %>%
+  rename_all(funs(str_replace_all(.,"([\\w])([0-9]+)$", "\\1\\.\\2"))) %>%
+  reshape(varying   = c(grep("X.", names(.))),
+                      direction = 'long', 
+                      timevar   = 'year')%>%
+  select(Country.Code,Indicator.Name,X,year) %>%
+  reshape(direction = 'wide',
+          idvar     = c('Country.Code','year'), 
+          timevar   = 'Indicator.Name') %>%
+  rename_all(tolower) %>%
+  inner_join(country.code)%>%
+  select(deflator = `x.gdp deflator (base year varies by country)`,
+         gdppc    = `x.gdp per capita (constant 2010 us$)`,
+         year,
+         Country)
 
 ##============================================================================##
 ## Pillar-III reports                                                         ##
@@ -128,7 +151,10 @@ bankscope <- bankscope %>%
   ungroup() %>%
   left_join(basel.indicator, by = c("Country")) %>%
   # Add EBA capital exercise information
-  left_join(EBA.indicator, by = c("bvdid"))
+  left_join(EBA.indicator, by = c("bvdid")) %>%
+  # Add macro variables
+  left_join(WDI, by = c("Country", "year"))
+
 
 # Save data frame
 save(bankscope,file=paste0("Data/Temp/BankScope.Rda"))
