@@ -140,7 +140,9 @@ bankscope <- bankscope %>%
          Country = ifelse(is.na(Country.x),Country.y,Country.x)) %>%
   # Reorder variables and remove auxiliar variables
   select(name,  Country, IRB, everything(), -contains("_"), -contains("."),
-         -c("companyname", "countryisocode","lastavail", "id")) %>% 
+         -c("companyname", "countryisocode","lastavail", "id", "guoname", "conscode",
+            "1", "status", "listeddelistedunlisted", "delisteddate", "guobvdid", "guocountryisocode",
+            "guotype", "closingdate", "month")) %>% 
   # Turn numeric variables to numeric format
   mutate_at(c(grep("usd", names(bankscope))[1]:ncol(bankscope)),as.numeric) %>%
   # Convert to USD
