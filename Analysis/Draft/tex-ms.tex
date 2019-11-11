@@ -70,7 +70,7 @@ $endif$
 \hypersetup{breaklinks=true,
             bookmarks=true,
             pdfauthor={$if(anonymous)$$else$$for(author)$$author.name$ ($author.affiliation$)$sep$ and $endfor$$endif$},
-             pdfkeywords = {$if(keywords)$$keywords$$endif$},  
+             pdfkeywords = {$if(keywords)$$keywords$$endif$},
             pdftitle={$title$$if(subtitle)$: $subtitle$$endif$},
             colorlinks=true,
             citecolor=$if(citecolor)$$citecolor$$else$blue$endif$,
@@ -109,10 +109,13 @@ $if(anonymous)$$else$\author{$for(author)$ $author.name$ \thanks{$author.affilia
 $if(abstract)$
 \begin{abstract}
 \noindent $abstract$\\
+$if(JEL)$
+\vspace{0in}\\
+\noindent\textbf{JEL classification codes:} $JEL$\\
+$endif$
 $if(keywords)$
 \vspace{0in}\\
 \noindent\textbf{Keywords:} $keywords$\\
-
 $endif$
 
 \bigskip
