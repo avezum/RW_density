@@ -5,6 +5,7 @@
 *.pdf
 *.html
 *.docx
+*.log
 packrat/lib*/
 packrat/src/
 Analysis/Draft/Draft_cache/
