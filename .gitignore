@@ -3,7 +3,6 @@
 .RData
 .Ruserdata
 *.pdf
-*.html
 *.docx
 *.log
 packrat/lib*/
