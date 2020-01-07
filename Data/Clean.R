@@ -9,6 +9,7 @@
 ##=============================================================================##
 
 rm(list = ls())  
+ptm <- proc.time()
 library(tidyverse)                ## Data manipulation, pipe operator
 library(zoo)                      ## Apply function to rolling margins of data
 library(DescTools)                ## Command to winsorize variables
@@ -59,6 +60,18 @@ for (i in 1:nrow(IRB.data)){
  
   IRB.data[i,"RWA.hat"] <- IRB.data[i,"EAD"]*mapping_wholesale(IRB.data[i,"w.avg.PD"],
                                                                IRB.data[i,"LGD"])["RW"]
+  
+  IRB.data[i,"RWA.til"]     <- IRB.data[i,"EAD"]*mapping_wholesale(IRB.data[i,"PD"],
+                                                               IRB.data[i,"LGD"],
+                                                               a = -50,
+                                                               R_l = 0.10,
+                                                               R_u = 0.28)["RW"]
+  
+  IRB.data[i,"RWA.bar"] <- IRB.data[i,"EAD"]*mapping_wholesale(IRB.data[i,"w.avg.PD"],
+                                                               IRB.data[i,"LGD"],
+                                                               a = -50,
+                                                               R_l = 0.10,
+                                                               R_u = 0.28)["RW"]
 }
 
 for (i in 1:nrow(IRB.data)){
@@ -151,18 +164,21 @@ for(i in c("Wholesale","Retail","Equity")) {
 bank.data <- IRB.data %>% 
   group_by(name,bvdid,Country,year,Portfolio_1) %>%
   filter(Portfolio_1 %in% c(i)) %>%
-  summarise(!!(paste("gini","PD"  ,        i, sep=".")) := Gini(PD,w.EAD, na.rm = TRUE),
-            !!(paste("sd"  ,"PD"  ,        i, sep=".")) := sqrt(wtd.var(PD,w.EAD, na.rm = TRUE))*100,
-            !!(paste("mean","PD"  ,        i, sep=".")) := wtd.mean(PD,w.EAD, na.rm = TRUE)*100,
-            !!(paste(       "RWA" ,        i, sep=".")) := sum(RWA, na.rm = TRUE),
-            !!(paste(       "RWA" , "hat", i, sep=".")) := sum(RWA.hat, na.rm = TRUE),
-            !!(paste(       "EAD" ,        i, sep=".")) := sum(EAD, na.rm = TRUE))%>%
+  summarise(!!(paste("gini", "PD" ,        i, sep=".")) := Gini(PD,w.EAD, na.rm = TRUE),
+            !!(paste("sd"  , "PD" ,        i, sep=".")) := sqrt(wtd.var(PD,w.EAD, na.rm = TRUE))*100,
+            !!(paste("mean", "PD" ,        i, sep=".")) := wtd.mean(PD,w.EAD, na.rm = TRUE)*100,
+            !!(paste(        "RWA",        i, sep=".")) := sum(RWA, na.rm = TRUE),
+            !!(paste(        "RWA", "hat", i, sep=".")) := sum(RWA.hat, na.rm = TRUE),
+            !!(paste(        "RWA", "til", i, sep=".")) := sum(RWA.til, na.rm = TRUE),
+            !!(paste(        "RWA", "bar", i, sep=".")) := sum(RWA.bar, na.rm = TRUE),
+            !!(paste(        "EAD",        i, sep=".")) := sum(EAD, na.rm = TRUE))%>%
   ungroup()%>%
   full_join(sample, by=c("bvdid","name","Country","year"))%>%
-  mutate(!!(paste("RW" ,"hat", i, sep=".")) := 100*get(paste("RWA","hat", i , sep="."))/get(paste("EAD", i , sep=".")),
-         !!(paste("RWA","s"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))-get(paste("RWA", i , sep=".")),
-         !!(paste("RWA","r"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))/get(paste("RWA", i , sep=".")),
-         !!(paste("RW" ,"s"  , i, sep=".")) := 100*ifelse(get(paste("EAD", i, sep=".")) == 0, 0,
+  mutate(!!(paste("RW" , "hat", i, sep=".")) := 100*get(paste("RWA","hat", i , sep="."))/get(paste("EAD", i , sep=".")),
+         !!(paste("RWA", "s"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))-get(paste("RWA", i , sep=".")),
+         !!(paste("RWA", "r"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))/get(paste("RWA", i , sep="."))-1,
+         !!(paste("RWA", "c"  , i, sep=".")) := get(paste("RWA","bar", i, sep="."))/get(paste("RWA","til", i , sep="."))-1,
+         !!(paste("RW" , "s"  , i, sep=".")) := 100*ifelse(get(paste("EAD", i, sep=".")) == 0, 0,
                                                get(paste("RWA","s", i , sep="."))/get(paste("EAD", i , sep="."))))%>%
   full_join(bank.data,by=c("bvdid","name","Country","year"))
 }
@@ -172,17 +188,20 @@ for(i in c("Corporate","Sovereign","Banks")) {
   bank.data <- IRB.data %>% 
     group_by(name,bvdid,Country,year,Portfolio_1,Portfolio_2) %>%
     filter(Portfolio_2 %in% c(i)) %>%
-    summarise(!!(paste("gini","PD"  ,        i, sep=".")) := Gini(PD,w.EAD, na.rm = TRUE),
-              !!(paste("sd"  ,"PD"  ,        i, sep=".")) := sqrt(wtd.var(PD,w.EAD, na.rm = TRUE))*100,
-              !!(paste("mean","PD"  ,        i, sep=".")) := wtd.mean(PD,w.EAD, na.rm = TRUE)*100,
-              !!(paste(       "RWA" ,        i, sep=".")) := sum(RWA, na.rm = TRUE),
-              !!(paste(       "RWA" , "hat", i, sep=".")) := sum(RWA.hat, na.rm = TRUE),
-              !!(paste(       "EAD" ,        i, sep=".")) := sum(EAD, na.rm = TRUE))%>%
+    summarise(!!(paste("gini", "PD" ,        i, sep=".")) := Gini(PD,w.EAD, na.rm = TRUE),
+              !!(paste("sd"  , "PD" ,        i, sep=".")) := sqrt(wtd.var(PD,w.EAD, na.rm = TRUE))*100,
+              !!(paste("mean", "PD" ,        i, sep=".")) := wtd.mean(PD,w.EAD, na.rm = TRUE)*100,
+              !!(paste(        "RWA",        i, sep=".")) := sum(RWA, na.rm = TRUE),
+              !!(paste(        "RWA", "hat", i, sep=".")) := sum(RWA.hat, na.rm = TRUE),
+              !!(paste(        "RWA", "til", i, sep=".")) := sum(RWA.til, na.rm = TRUE),
+              !!(paste(        "RWA", "bar", i, sep=".")) := sum(RWA.bar, na.rm = TRUE),
+              !!(paste(        "EAD",        i, sep=".")) := sum(EAD, na.rm = TRUE))%>%
     ungroup()%>%
     full_join(sample, by=c("bvdid","name","Country","year"))%>%
     mutate(!!(paste("RW" ,"hat", i, sep=".")) := 100*get(paste("RWA","hat", i , sep="."))/get(paste("EAD", i , sep=".")),
            !!(paste("RWA","s"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))-get(paste("RWA", i , sep=".")),
-           !!(paste("RWA","r"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))/get(paste("RWA", i , sep=".")),
+           !!(paste("RWA","r"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))/get(paste("RWA", i , sep="."))-1,
+           !!(paste("RWA","c"  , i, sep=".")) := get(paste("RWA","bar", i, sep="."))/get(paste("RWA","til" ,i , sep="."))-1,
            !!(paste("RW" ,"s"  , i, sep=".")) := 100*ifelse(get(paste("EAD", i, sep=".")) == 0, 0,
                                                  get(paste("RWA","s", i , sep="."))/get(paste("EAD", i , sep=".")))) %>% 
     full_join(bank.data,by=c("bvdid","name","Country","year"))
@@ -191,7 +210,7 @@ for(i in c("Corporate","Sovereign","Banks")) {
 # Add PD moments for entire IRB portfolio
 bank.data <- IRB.data %>%
   select(bvdid, year, w.EAD, PD) %>%
-  mutate(w.EAD = round(w.EAD/1000),
+  mutate(w.EAD = round(w.EAD/10),
          PD = PD*100) %>%
   na.omit(cols=c("w.EAD")) %>%
   expandRows("w.EAD")%>%
@@ -231,6 +250,7 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           EAD.SA        = ifelse(is.na(EAD.SA) & sample == "Yes",0,EAD.SA),  
           EAD           = sum(EAD.IRB, EAD.SA, na.rm = TRUE),
           RWA.IRB       = sum(RWA.Wholesale, RWA.Retail, RWA.Equity, na.rm = TRUE),
+          RWA.til       = sum(RWA.til.Wholesale, RWA.Retail, RWA.til.Equity, na.rm = TRUE),
           RWA.SA        = ifelse(is.na(RWA.SA) & sample == "Yes",0,RWA.SA),  
           RWA           = sum(RWA.IRB, RWA.SA, na.rm = TRUE),
           RWA.alt       = 100*(totalcapitalmillcu/totalcapitalratio),
@@ -238,7 +258,9 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           RW.IRB        = 100*RWA.IRB/EAD.IRB,
           RWA.s         = sum(RWA.s.Wholesale, RWA.s.Retail, RWA.s.Equity, na.rm = TRUE),
           RWA.hat       = sum(RWA.hat.Wholesale, RWA.hat.Retail, RWA.hat.Equity, na.rm = TRUE),
+          RWA.bar       = sum(RWA.bar.Wholesale, RWA.Retail, RWA.bar.Equity, na.rm = TRUE),
           RWA.r         = RWA.hat/RWA.IRB-1,
+          RWA.c         = RWA.bar/RWA.til-1,
           RWA.hat.total = sum(RWA, RWA.s, na.rm = TRUE),
           RWA.hat.alt   = sum(RWA.alt, RWA.s, na.rm = TRUE),
           RW.s          = 100*ifelse(EAD.IRB == 0 & IRB == 0, 0, RWA.s/EAD.IRB),
@@ -249,6 +271,7 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           q.Equity      = EAD.Equity/EAD.IRB,
           CAR.alt       = 100*(totalcapitalmillcu/RWA.hat.alt),
           CAR           = ifelse(RWA.IRB > 0 & totalcapitalmillcu>0,100*(totalcapitalmillcu/RWA.IRB),NA),
+          CAR.til       = ifelse(RWA.til > 0 & totalcapitalmillcu>0,100*(totalcapitalmillcu/RWA.til),NA),
           tier          = 100*(tier1capitalmillcu/RWA),
           CAR.hat       = 100*(totalcapitalmillcu/RWA.hat.total),
           tier.hat      = 100*(tier1capitalmillcu/RWA.hat.total),
@@ -256,10 +279,12 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           CAR.dif       = ifelse(EAD.IRB == 0 & IRB == 0, 0,CAR - CAR.hat),
           tier.dif      = ifelse(EAD.IRB == 0 & IRB == 0, 0,tier - tier.hat),
           log.CAR       = log(CAR),
+          log.CAR.til   = log(CAR.til),
           log.K         = log(totalcapitalmillcu),
           log.tier      = log(tier1capitalmillcu),
           log.asset     = log(totalassetsmillcu),
           log.gdp       = log(gdppc),
+          log.loans     = log(grossloansmillcu*(1-loanlossresgrossloans/100)),
           deposit.ratio = 100*totalcustomerdepositsmillcu/totalassetsmillcu,
           loans.ratio   = 100*grossloansmillcu/totalassetsmillcu,
           NII.ratio     = 100*netinterestrevenuemillcu/operatingrevenueturnovermillcu,
@@ -512,3 +537,4 @@ for(i in c("Wholesale", "Retail", "Equity")) {
        file=paste0("Data/Datasets/",j, "decomposition",".Rda"))
 }
 
+proc.time() - ptm

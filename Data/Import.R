@@ -12,7 +12,6 @@ rm(list = ls())
 library(tidyverse)    ## Data manipulation, pipe operator                                                             
 library(readxl)       ## Command to open xlsx files                                                     
 library(data.table)   ## Command to bind lists
-library(reshape2)     ## Command to transform data from wide to long
 library(stringr)      ## Command to clean variables names in Orbis
 
 ##============================================================================##
