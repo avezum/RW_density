@@ -65,16 +65,16 @@ library(DescTools)            ## Command to winsorize variables
 library(ggpubr)               ## More plots
 #library(relaimpo)            ## Calculate relative importance measures
 
-source("../Auxiliar/Function.R") ## Capital requirements functions
+source("../../Auxiliar/Function.R") ## Capital requirements functions
 
 ```
 
 ```{r load data, include=TRUE}
-load("../Data/Datasets/Pillar3Data.Rda")
-load("../Data/Datasets/BankData.Rda")
-load("../Data/Datasets/CrossSectionDecomposition.Rda")
-load("../Data/Datasets/timedecomposition.Rda")
-load("../Data/Datasets/yeardecomposition.Rda")
+load("../../Data/Datasets/Pillar3Data.Rda")
+load("../../Data/Datasets/BankData.Rda")
+load("../../Data/Datasets/CrossSectionDecomposition.Rda")
+load("../../Data/Datasets/timedecomposition.Rda")
+load("../../Data/Datasets/yeardecomposition.Rda")
 ```
 
 ```{r , fig.height = 10, fig.width = 7, results="asis"}
