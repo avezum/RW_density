@@ -1,0 +1,1076 @@
+---
+title: "Credit Risk Distribution and Capital Savings"
+author: | 
+  | Lucas Avezum
+  | Tilburg University
+date: "November 19, 2019"
+header-includes:
+   - \usepackage{bbm,dcolumn,transparent}
+output: 
+  beamer_presentation:
+    theme: "Boadilla"
+    colortheme: "beaver"
+  
+bibliography: ../../Auxiliar/mybibfile.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo      = FALSE, 
+                      warning   = FALSE, 
+                      error     = FALSE, 
+                      tidy      = TRUE, 
+                      tidy.opts = list(width.cutoff=50), 
+                      collapse  = TRUE,
+                      warning   = FALSE,
+                      error     = FALSE,
+                      message   = FALSE, 
+                      comment   = "",
+                      cache     = FALSE) 
+
+rm(list = ls())
+ 
+
+library(tidyverse)            ## Data manipulation, pipe operator
+library(data.table)           ## Command to bind lists
+library(ggridges)             ## Density ridges plot
+library(stargazer)            ## Latex tables
+library(lfe)                  ## High-dimensional fixed effects
+library(gridExtra)            ## Create grid for plots and tables
+library(cowplot)              ## Create grid for plots and tables
+library(DescTools)            ## Command to winsorize variables
+library(ggpubr)               ## More plots
+#library(relaimpo)            ## Calculate relative importance measures
+
+source("../../Auxiliar/Function.R") ## Capital requirements functions
+
+```
+
+```{r load data, include=TRUE}
+load("../../Data/Datasets/Pillar3Data.Rda")
+load("../../Data/Datasets/BankData.Rda")
+load("../../Data/Datasets/CrossSectionDecomposition.Rda")
+load("../../Data/Datasets/timedecomposition.Rda")
+load("../../Data/Datasets/yeardecomposition.Rda")
+```
+
+## Banks and Regulation 
+
+Banks:
+
+- Pool short-term liabilities to fund long-term assets.
+
+- Perform other important activities (payment process).
+
+- Central role to monetary policy transmission [@bernanke1995inside].
+
+- unstable, prone to runs [@diamond1983bank].
+
+## Capital Requirements
+
+
+- Rationale: Compensate for public guarantees and externalities that result in banks having less capital than socially desirable. 
+
+- However, there is no consensus on appropriate level and implementation [@diamond2000theory; @diamond2001liquidity; @admati2014bankers].
+
+- Hence, regulation on capital requirements have changed substantially since first international standard.
+
+- Arguably, risk sensitivity is at the center of the changes [@danielsson2001academic; @basel2004international; @EBA2019policy]
+
+
+## Capital Requirements and Risk Sensitivity
+
+- Basel I (July 1988): Sets fixed risk-weights for assets within same class. 
+
+\begin{equation*}
+\begin{aligned}
+\label{eq5}
+\text{Capital Ratio} = \frac{K}{\sum_j\alpha_j\sum_i  x_{i,j}} \geq k
+\end{aligned}
+\end{equation*}
+
+
+$K$: equity capital \newline
+$x_i$: asset $i$ from class $j \in \{\text{Corporate, Retail, Sovereign, etc...} \}$ \newline
+$\alpha_j$: weight for assets in class $j$ \newline
+$k$: capital ratio requirement \newline
+
+\pause
+
+- Problem: simple rule may incentivize banks to hold more risky portfolios and increase probability of failure [@koehn1980regulation]
+
+
+## Capital Requirements and Risk sensitivity
+
+Basel II (2004): Introduces the possibility to use internal-based rating (IRB) models to calculate risk-weights 
+
+\begin{equation*}
+\begin{aligned}
+\label{eq5}
+\text{Capital Ratio} = \frac{K}{\sum_j\sum_i \alpha_{i,j}  x_{i,j}} \geq k
+\end{aligned}
+\end{equation*} 
+
+$\alpha_{i,j}$: weight for assets $i$, estimated using banks own risk models. 
+
+\pause
+
+Rationale: 
+
+- Riskier banks will hold more capital [@kim1988risk].
+- Alignment of risk estimates to actual risk [@barakova2014banks].  
+
+\pause
+
+Problems: 
+
+- Enhances procyclical nature of lending [@behn2016procyclical].
+- Allow differences for reasons other than risk [@mariathasan2014manipulation; @behn2016limits].
+
+## Credit Risk Distribution and Capital Savings 
+
+- This paper contributes to the understanding of risk-sensitive capital requirements ($\alpha_{i,j}$).
+
+- I identify a novel effect stemming from the design of the IRB framework: banks save capital requirements because mapping from risk (PD) is concave.
+
+- I collect data and propose a measure of this effect.
+
+- Key findings:
+  - Reduces the procyclicality of RWA by 11.2 percentage points. 
+  - Explains 27% of RW variation across banks. 
+
+## Concavity of Capital Requirements
+
+```{r parameters and data, echo=FALSE, include=FALSE}
+set.seed(123)
+LGD <- 1
+M   <- 2.5
+grid  <- seq(0.0001, 1, by=0.00001) 
+data <- mapping_retail(grid,1,0.15,0.999)
+PD.l <- 0.01
+PD.h <- 0.15
+PD.a <- (PD.l+PD.h)/2
+PD.h2 <- 0.17
+PD.h3 <- 0.16
+PD.l3 <- 0.02
+PD.a2 <- (PD.l+PD.h2)/2
+K.l  <- as.numeric(mapping_retail(PD.l,1,0.15,0.999)["K"])
+K.h  <- as.numeric(mapping_retail(PD.h,1,0.15,0.999)["K"])
+K.a  <- as.numeric(mapping_retail(PD.a,1,0.15,0.999)["K"])
+K.l3 <- as.numeric(mapping_retail(PD.l3,1,0.15,0.999)["K"])
+K.h2 <- as.numeric(mapping_retail(PD.h2,1,0.15,0.999)["K"])
+K.h3 <- as.numeric(mapping_retail(PD.h3,1,0.15,0.999)["K"])
+K.a2  <- as.numeric(mapping_retail(PD.a2,1,0.15,0.999)["K"])
+K.s  <- ((K.h-K.l)/(PD.h-PD.l))*PD.a+K.l-((K.h-K.l)/(PD.h-PD.l))*PD.l
+K.s2 <- ((K.h2-K.l)/(PD.h2-PD.l))*PD.a2+K.l-((K.h2-K.l)/(PD.h2-PD.l))*PD.l
+K.s3 <- ((K.h3-K.l3)/(PD.h3-PD.l3))*PD.a2+K.l3-((K.h3-K.l3)/(PD.h3-PD.l3))*PD.l3
+aux.df <- data.frame(PD.l = PD.l, PD.h = PD.h, PD.a = PD.a, PD.l3 = PD.l3, PD.a2,
+                     K.l = K.l, K.h = K.h, K.a = K.a, K.s = K.s, K.l3 = K.l3, K.h2 = K.h2, 
+                     K.h3 = K.h3, K.s3 = K.s3, K.s2 = K.s2)
+```
+```{r, fig.height = 3, fig.width = 4,results="hide",out.width = "90%", fig.align = 'center', echo=FALSE, message=FALSE}
+
+
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K)) 
+p + geom_line(alpha = 1) +
+  labs(x = "PD", 
+         y = "Risk-weight") +
+  theme_bw()+
+  theme(axis.ticks = element_blank(),
+        axis.line = element_line(),
+        panel.grid = element_blank())+
+  expand_limits(x = 0, y = 0)+
+  scale_x_continuous("",breaks=c(PD.h+0.03),labels=c("PD"),expand = c(0, 0))+
+  scale_y_continuous("",breaks=c(K.h),labels=c("RWA"),expand = c(0, 0)) 
+  
+
+```
+## Concavity of Capital Requirements
+```{r, fig.height = 3, fig.width = 4,results="hide",out.width = "90%", fig.align = 'center', echo=FALSE, message=FALSE}
+
+
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K)) 
+p + geom_line(alpha = 1) + 
+  geom_segment(aes(x = PD.l, y = 0, xend = PD.l, yend = K.l), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.h, y = 0, xend = PD.h, yend = K.h), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.l, y = K.l, xend = PD.h, yend = K.h), data = aux.df, linetype=1)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = PD.a, yend = 0), data = aux.df, linetype=3)+
+  theme_bw()+
+  theme(axis.ticks = element_blank(),
+        axis.line = element_line(),
+        panel.grid = element_blank())+
+  expand_limits(x = 0, y = 0)+
+  scale_x_continuous("",breaks=c(PD.l,PD.a,PD.h),labels=c("Low PD","Mean PD","High PD"),expand = c(0, 0))+
+  scale_y_continuous("",breaks=c(K.s,K.a),labels=c("",""),expand = c(0, 0)) 
+  
+
+```
+
+
+## Concavity of Capital Requirements
+```{r, fig.height = 3, fig.width = 4,results="hide",out.width = "90%", fig.align = 'center', echo=FALSE, message=FALSE}
+
+
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K)) 
+p + geom_line(alpha = 1) + 
+  geom_segment(aes(x = PD.l, y = 0, xend = PD.l, yend = K.l), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.h, y = 0, xend = PD.h, yend = K.h), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.l, y = K.l, xend = PD.h, yend = K.h), data = aux.df, linetype=1)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = PD.a, yend = 0), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.s, xend = 0, yend = K.s), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = 0, yend = K.a), data = aux.df, linetype=5)+
+  geom_segment(aes(x=PD.l, xend=PD.l, y=K.a, yend=K.s),
+               arrow = arrow(length = unit(0.15, "cm"),type = "closed"),linejoin='mitre',size = 0.5)+
+
+  labs(x = "PD", 
+         y = "Risk-weight") +
+  theme_bw()+
+  theme(axis.ticks = element_blank(),
+        axis.line = element_line(),
+        panel.grid = element_blank())+
+  expand_limits(x = 0, y = 0)+
+  scale_x_continuous("",breaks=c(PD.l,PD.a,PD.h),labels=c("Low PD","Mean PD","High PD"),expand = c(0, 0))+
+  scale_y_continuous("",breaks=c(K.s,K.a),labels=c("RWA",expression(paste(RWA^{c}))),expand = c(0, 0)) +
+  annotate("text", x = (PD.l+PD.a)/3 , y = (K.s+K.a)/2, label = "Capital \n Savings", size = 3)
+  
+
+```
+## Capital Savings Measure
+
+\begin{equation*}
+\begin{aligned}
+\label{eq5}
+\text{RWA}^s = \frac{\text{RWA}^c}{\text{RWA}} 
+\end{aligned}
+\end{equation*} 
+
+\pause
+
+\begin{equation*}
+\begin{aligned}
+\label{eq5}
+\text{RWA}^{\$} = \text{RWA}^c-\text{RWA} 
+\end{aligned}
+\end{equation*} 
+
+## Data and Pillar-III Disclosures
+```{r , echo=FALSE,  out.width = '100%'}
+knitr::include_graphics("../../Auxiliar/Pictures/Citi_table.png")
+```
+
+## Capital Savings Across Banks
+
+
+```{r, include = TRUE, fig.height = 5, fig.width = 8,out.width = "90%",results="hide", fig.align = 'center'}
+bank.data %>% filter(!is.na(RW.s), bvdid %in% pillar3.data$bvdid)  %>% 
+  select(name, Country, RWA.r)%>%
+  group_by(name, Country) %>%
+#   summarise_if(is.numeric,median,na.rm= TRUE)%>%
+  group_by(Country) %>%
+ # mutate(order_aux = 1000*mean(RWA.r,na.rm = TRUE))%>%
+  #ungroup()%>%
+  #mutate(ordering = order_aux+RWA.r,
+  #       name = as.factor(name),
+  #       name = fct_reorder(name, ordering),
+  #       Country = fct_reorder(Country, ordering)) %>%
+ ggplot(mapping = aes(x = reorder(name, RWA.r, FUN = mean, na.rm=TRUE),
+                      y = RWA.r)) +
+geom_point(alpha = 0.5,size = 2) +
+  stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
+    labs(x=NULL) +
+  labs(y =  "RWA savings ratio") +
+   theme_bw()+
+  theme(panel.grid = element_blank(),
+         axis.text.x = element_text(angle = 45, hjust = 1))+
+  scale_fill_grey()
+   
+
+```
+
+## Capital Savings Across Countries
+
+```{r, include=TRUE, fig.height = 4, fig.width = 3, out.width = "50%", results="hide", fig.align = 'center'}
+bank.data %>% filter(!is.na(RW.s), bvdid %in% pillar3.data$bvdid) %>% 
+  select(Country,name, year, RWA.r)%>%
+  group_by(Country,name) %>%
+ summarise_if(is.numeric,mean,na.rm= TRUE)%>%
+ ggplot(mapping = aes(x = reorder(Country, RWA.r, FUN = mean, na.rm=TRUE),
+                          y = RWA.r)) +
+geom_point(alpha = 0.5,size = 2) +
+  stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
+    labs(x=NULL) +
+  labs(y =  "RWA savings ratio") +
+  coord_flip() +
+  theme_bw()
+
+```
+
+## Decomposition
+
+
+\begin{equation*}
+\begin{aligned}
+\label{eq5}
+\text{RWA} & = \text{RWA}_{SA}+\text{RWA}_{IRB} \\
+\pause
+& = \text{RWA}_{SA}+\text{RWA}^{c}-\text{RWA}^{\$}\\
+\pause
+& = \text{RWA}_{SA}+\sum_{j=1}^P\text{RWA}^{c}_j-\text{RWA}^{\$}\\
+\end{aligned}
+\end{equation*}
+
+## Decomposition
+
+\begin{equation*}
+\begin{aligned}
+\label{eq5}
+\frac{\text{RWA}}{\text{EAD}}&= \frac{\text{RWA}_{SA}}{\text{EAD}_{SA}}\frac{\text{EAD}_{SA}}{\text{EAD}}+\frac{\text{EAD}_{IRB}}{\text{EAD}}\sum_{j=1}^P\frac{\text{EAD}_{IRB,j}}{\text{EAD}_{IRB}}\frac{\text{RWA}^{c}_j}{\text{EAD}_{IRB}}+\frac{\text{RWA}^{\$}}{\text{EAD}_{IRB}}\frac{\text{EAD}_{IRB}}{\text{EAD}}\\
+\pause
+\text{RW} &= \text{RW}_{SA}q_{SA}+(1-q_{SA})\sum_{j=1}^P q_{j}\text{RW}^{c}_j +(1-q_{SA})\text{RW}^{s}\\
+\end{aligned}
+\end{equation*}
+
+
+## Decomposition
+
+\begin{equation*}
+\begin{aligned}
+\label{eq5}
+\text{RW}-\text{RW}^B =& \text{RW}_{SA}q_{SA}+(1-q_{SA})\sum_{j=1}^P q_{j}\text{RW}^{c}_j +(1-q_{SA})\text{RW}^{s}\\
+&- \text{RW}_{SA}^Bq_{SA}^B+(1-q_{SA}^B)\sum_{j=1}^P q_{j}^B\text{RW}^{c,B}_j +(1-q_{SA})\text{RW}^{s,B}
+\end{aligned}
+\end{equation*}
+
+## Decomposition
+
+
+\begin{equation*}
+\begin{aligned}
+\label{eq5}
+\Delta \text{RW} & = \underbrace{q^{B}_{SA} \Delta \text{RW}_{SA}}_\text{SA mix}+\underbrace{(1-q^{B}_{SA})\sum_{j=1}^{P} q^{B}_{j}\Delta \text{RW}^{c}_j}_\text{Mean IRB Risk}\\
+&\\
+&+ \underbrace{(1-q^{B}_{SA})\sum_{j=1}^{P} \text{RW}_{j}^{c} \Delta q^{j}}_\text{IRB mix}  + \underbrace{(\text{RW}_{SA}-\text{RW}^{c})\Delta q_{SA}}_\text{Roll-out}\\
+&\\
+&- \underbrace{(1-q^{B}_{SA})\Delta \text{RW}^{s}}_\text{Intensive margin}+ \underbrace{\text{RW}^{s}\Delta q_{SA}}_\text{Extensive margin}
+\end{aligned}
+\end{equation*}
+
+## Cross-sectional Decomposition
+
+```{r, fig.height = 5, fig.width = 8,out.width = "90%", results="hide", include=TRUE,fig.align = 'center'}
+cross.section.decomposition %>% filter(q.SA<1)%>%
+  mutate(total= -PD.gain)%>%
+  select(name, Country,total, other.gain, PD.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = factor(condition, levels = c("PD.gain","other.gain"),
+                                       labels = c("Capital savings", "Other components")))%>%
+ggplot(mapping = aes(x = reorder(name, total),
+                       y = value)) +
+geom_bar(stat = 'identity')+
+  labs(x=NULL, y= NULL) +
+    theme_bw()+
+  theme(panel.grid = element_blank(),
+         axis.text.x = element_text(angle = 45, hjust = 1))+
+  facet_wrap(~condition, nrow = 2, ncol = 1)
+  
+```
+
+## Cross-sectional Decomposition
+
+```{r, fig.height = 3, fig.width = 4, results="hide",out.width = "80%", include=TRUE,fig.align = 'center'}
+cross.section.decomposition %>% 
+  filter(q.SA<1)%>%
+  select(name, Country, other.gain, PD.gain) %>%
+  mutate_if(is.numeric,Winsorize,probs = c(0.02, 1) ,na.rm = TRUE)%>% 
+  ggplot(mapping = aes(x = PD.gain,
+                       y = other.gain)) +
+    geom_point()+
+    geom_smooth(method = "lm", color = "black")  +
+  labs(x=NULL, y= NULL) +
+   theme_bw() +
+  theme(panel.grid.minor = element_blank())+
+  scale_fill_grey()+
+  stat_cor(label.y= -0.1)
+```
+
+## Cross-sectional Decomposition
+
+```{r, fig.height = 5, fig.width = 8,out.width = "90%", results="hide", include=TRUE,fig.align = 'center'}
+cross.section.decomposition %>% filter(q.SA<1)%>%
+   mutate(total= -PD.gain)%>%
+  select(name, Country,total, int.gain, ext.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = factor(condition, levels = c("int.gain","ext.gain"),
+                                       labels = c("Intensive margin", "Extensive margin")))%>%
+ggplot(mapping = aes(x = reorder(name, total),
+                       y = value)) +
+geom_bar(stat = 'identity')+
+  labs(x=NULL, y= NULL) +
+    theme_bw()+
+  theme(panel.grid = element_blank(),
+         axis.text.x = element_text(angle = 45, hjust = 1))+
+  facet_wrap(~condition, nrow = 2, ncol = 1)
+  
+```
+
+## Cross-sectional Decomposition
+
+```{r, fig.height = 3, fig.width = 4, results="hide",out.width = "80%", include=TRUE,fig.align = 'center'}
+cross.section.decomposition %>% 
+  filter(q.SA<1)%>%
+  select(name, Country, int.gain, ext.gain) %>%
+  mutate_if(is.numeric,Winsorize,probs = c(0.02, 1) ,na.rm = TRUE)%>% 
+  ggplot(mapping = aes(x = int.gain,
+                       y = ext.gain)) +
+    geom_point()+
+    geom_smooth(method = "lm", color = "black")  +
+  labs(x=NULL, y= NULL) +
+   theme_bw() +
+  theme(panel.grid.minor = element_blank())+
+  scale_fill_grey()+
+  stat_cor(label.y= -0.1)
+```
+
+## R-squared decompostion
+
+```{r,fig.height = 4, fig.width = 6,out.width = "70%", results="hide", include=TRUE,fig.align = 'center'}
+
+unrestrict <- cross.section.decomposition %>% filter(q.SA<1) %>%
+  mutate(epsilon = rnorm(nrow(.),0,0.0000001),
+         total.gain = total.gain+epsilon)%>% 
+  lm(data = ., total.gain ~ IRB.gain + mix.gain + rollout.gain + int.gain + ext.gain + SA.gain)%>%
+  relaimpo::calc.relimp(type = c("lmg"), rela = FALSE )
+
+  data.frame(share  = unrestrict@lmg) %>%
+   add_rownames(var = "component")%>%
+  mutate(component = factor(component,
+                      levels = c("IRB.gain", "ext.gain", "int.gain", "SA.gain", "mix.gain", "rollout.gain"),
+                      labels = c("PD avg.", "PD ext.", "PD int.", "SA", "Mix", "Rollout"))) %>%
+ggplot(mapping = aes(x = reorder(component, -share),
+                       y = share)) +
+geom_bar(stat = 'identity')+
+  labs(x=NULL, y = expression(paste("Share of ", R^{2}))) +
+    theme_bw()+
+  theme(panel.grid.minor = element_blank())+
+  theme(strip.background = element_blank(),
+       # strip.text = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))+
+  scale_fill_grey()+
+scale_y_continuous(labels = scales::percent_format(accuracy = 1,
+                                 decimal.mark = '.'))
+
+```
+
+## Time decomposition
+
+```{r, fig.height = 4, fig.width = 7, results="hide",out.width = "1\\textwidth",fig.align = 'center'}
+
+plot1 <-time.decomposition %>% 
+  select(time, RW, t0.RW,  int.gain, ext.gain, other.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = factor(condition,levels=c("int.gain","ext.gain","other.gain")),
+         RW = RW - t0.RW,
+         time = as.factor(time)) %>%
+  ggplot(mapping = aes(x = time,
+                       y    = value, 
+                       fill = condition)) +
+geom_bar(stat = 'identity')+
+geom_line(aes(group=1, y = RW))  +
+  theme_bw()+
+  labs( y = 'Change from t=0', subtitle = "Plot a" ) +
+  scale_x_discrete( name=NULL,breaks = c("0","2","4","6","8"),labels = c("t=0","t=2","t=4","t=6","t=8")) +
+ theme(legend.position = c(0.3, 0.2), 
+        legend.title = element_blank(), 
+        legend.background=element_blank())+
+  scale_fill_grey(labels = c("Intensive effect", "Extensive effect", "Others"), name = "Component")
+
+year.decomposition <- year.decomposition %>%
+  mutate(RW_2 = RW - t0.RW,
+         year = as.factor(year)) 
+plot2 <- year.decomposition %>% 
+  select(year,RW, int.gain, ext.gain, other.gain) %>%
+  gather(condition, value, contains(".gain"), factor_key=TRUE)%>%
+  mutate(condition = factor(condition,levels=c("int.gain","ext.gain","other.gain"))) %>%
+  ggplot(mapping = aes(x = year)) +
+geom_bar(aes(y = value, 
+          fill = condition),
+          stat = 'identity')+
+geom_line(data = year.decomposition, 
+          aes(group=1,y = RW_2))  +
+  theme_bw()+
+  labs(y = 'Change from 2008', x=NULL, subtitle = "Plot b") +
+  scale_x_discrete(breaks = c("2008","2010","2012","2014","2016","2018"))+
+theme(legend.position='none')+
+  scale_fill_grey()
+grid.arrange(plot1, plot2, ncol=2)
+    
+```
+
+## Regulatory Pressure and Reduction in Overall Risk 
+
+```{r, fig.height = 4, fig.width = 5,out.width = "80%", results="hide",fig.align = 'center'}
+
+mean_cl_quantile <- function(x, q=c(0.25, 0.75), na.rm=TRUE){
+  dat <- data.frame(y=mean(x, na.rm = TRUE),
+                    ymin = quantile(x, probs = q[1],na.rm = na.rm),
+                    ymax = quantile(x, probs = q[2],na.rm = na.rm))
+  return(dat)
+}
+scaleFUN <- function(x) sprintf("%.1f", x)
+
+plot1 <-bank.data %>% filter(year>2007)%>%
+  select(bvdid, year, capital.ratio) %>%
+  mutate(year = lubridate::ymd(year, truncated = 2L))%>%
+  ggplot(mapping = aes(x = year,y=capital.ratio)) +
+geom_smooth(stat = 'summary',
+            fun.data = mean_cl_quantile,
+            color = "black")+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())+
+  labs(y = 'Capital Ratio (%)', x=NULL) + scale_y_continuous(labels=scaleFUN)
+
+plot2 <-bank.data %>% filter(year>2007)%>%
+  select(bvdid, year,  mean.PD) %>%
+  mutate(year = lubridate::ymd(year, truncated = 2L))%>%
+  ggplot(mapping = aes(x = year,y=mean.PD)) +
+geom_smooth(stat = 'summary',
+            fun.data = mean_cl_quantile,
+            color = "black")+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())+
+   labs(y = 'Average PD (%)', x=NULL)
+
+plot3 <-bank.data %>% filter(year>2007)%>%
+  select(bvdid, year, var.PD) %>%
+  mutate(year = lubridate::ymd(year, truncated = 2L))%>%
+  ggplot(mapping = aes(x = year,y=sqrt(var.PD))) +
+geom_smooth(stat = 'summary',
+            fun.data = mean_cl_quantile,
+            color = "black")+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())+
+   labs(y = 'SD PD (%)', x=NULL)
+
+plot_grid(plot1, plot2, plot3, hjust = 0.5,
+            ncol = 1, nrow = 3, align = "v", axis = "lr")
+```
+
+```{r , fig.height = 10, fig.width = 7, results="asis"}
+p_w <- c(0.05, 0.95)         ## Set winsorizing limits
+bank.data.win <- bank.data %>% 
+  ungroup()%>%
+  filter(!is.na(RW.s), bvdid %in% pillar3.data$bvdid) %>% 
+  mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)%>% 
+  group_by(bvdid)
+
+``` 
+
+## Capital Savings and Cyclicality
+```{r, fig.height = 3, fig.width = 4,results="hide",out.width = "90%", fig.align = 'center', echo=FALSE, message=FALSE}
+
+
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K)) 
+p + geom_line(alpha = 1) + 
+  geom_segment(aes(x = PD.l, y = 0, xend = PD.l, yend = K.l), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.h, y = 0, xend = PD.h, yend = K.h), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.l, y = K.l, xend = PD.h, yend = K.h), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = PD.a, yend = 0), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.s, xend = 0, yend = K.s), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = 0, yend = K.a), data = aux.df, linetype=3)+
+  theme_bw()+
+  theme(axis.ticks = element_blank(),
+        axis.line = element_line(),
+        panel.grid = element_blank())+
+  expand_limits(x = 0, y = 0)+
+  scale_x_continuous("",breaks=c(PD.l,PD.a,PD.h),labels=c("Low PD","Mean PD","High PD"),expand = c(0, 0))+
+  scale_y_continuous("",breaks=c(K.s,K.a),labels=c("",""),expand = c(0, 0)) 
+  
+
+```
+## Capital Savings and Cyclicality
+```{r, fig.height = 3, fig.width = 4,results="hide",out.width = "90%", fig.align = 'center', echo=FALSE, message=FALSE}
+
+
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K)) 
+p + geom_line(alpha = 1) + 
+  geom_segment(aes(x = PD.l, y = 0, xend = PD.l, yend = K.l), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.h, y = 0, xend = PD.h, yend = K.h), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.l, y = K.l, xend = PD.h, yend = K.h), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = PD.a, yend = 0), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.s, xend = 0, yend = K.s), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = 0, yend = K.a), data = aux.df, linetype=3)+
+  
+  geom_segment(aes(x = PD.l3, y = 0, xend = PD.l3, yend = K.l3), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.h3, y = 0, xend = PD.h3, yend = K.h3), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.l3, y = K.l3, xend = PD.h3, yend = K.h3), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.a2, y = K.a2, xend = PD.a2, yend = 0), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.a2, y = K.s3, xend = 0, yend = K.s3), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.a2, y = K.a2, xend = 0, yend = K.a2), data = aux.df, linetype=5)+
+  
+  
+  theme_bw()+
+  theme(axis.ticks = element_blank(),
+        axis.line = element_line(),
+        panel.grid = element_blank())+
+  expand_limits(x = 0, y = 0)+
+  scale_x_continuous("",breaks=c(PD.l,PD.a,PD.h),labels=c("Low PD","Mean PD","High PD"),expand = c(0, 0))+
+  scale_y_continuous("",breaks=c(K.s,K.a),labels=c("",""),expand = c(0, 0)) 
+  
+
+```
+## Capital Savings and Cyclicality
+```{r, fig.height = 3, fig.width = 4,results="hide",out.width = "90%", fig.align = 'center', echo=FALSE, message=FALSE}
+
+
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K)) 
+p + geom_line(alpha = 1) + 
+  geom_segment(aes(x = PD.l, y = 0, xend = PD.l, yend = K.l), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.h, y = 0, xend = PD.h, yend = K.h), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.l, y = K.l, xend = PD.h, yend = K.h), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = PD.a, yend = 0), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.s, xend = 0, yend = K.s), data = aux.df, linetype=3)+
+  geom_segment(aes(x = PD.a, y = K.a, xend = 0, yend = K.a), data = aux.df, linetype=3)+
+  
+
+  geom_segment(aes(x = PD.h2, y = 0, xend = PD.h2, yend = K.h2), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.l, y = K.l, xend = PD.h2, yend = K.h2), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.a2, y = K.a2, xend = PD.a2, yend = 0), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.a2, y = K.s2, xend = 0, yend = K.s2), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.a2, y = K.a2, xend = 0, yend = K.a2), data = aux.df, linetype=6)+
+  
+  
+  theme_bw()+
+  theme(axis.ticks = element_blank(),
+        axis.line = element_line(),
+        panel.grid = element_blank())+
+  expand_limits(x = 0, y = 0)+
+  scale_x_continuous("",breaks=c(PD.l,PD.a,PD.h),labels=c("Low PD","Mean PD","High PD"),expand = c(0, 0))+
+  scale_y_continuous("",breaks=c(K.s,K.a),labels=c("",""),expand = c(0, 0)) 
+  
+
+```
+
+## Capital Savings and Cyclicality
+
+```{r, fig.height = 3, fig.width = 4,results="hide",out.width = "90%", fig.align = 'center', echo=FALSE, message=FALSE}
+
+
+p <- ggplot(data = subset(data,subset = PD <0.2),
+            mapping = aes(x = PD, y=K)) 
+p + geom_line(alpha = 1) + 
+  geom_segment(aes(x = PD.l, y = 0, xend = PD.l, yend = K.l), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.h2, y = 0, xend = PD.h2, yend = K.h2), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.l, y = K.l, xend = PD.h2, yend = K.h2), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.a2, y = K.a2, xend = PD.a2, yend = 0), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.a2, y = K.s2, xend = 0, yend = K.s2), data = aux.df, linetype=6)+
+  geom_segment(aes(x = PD.a2, y = K.a2, xend = 0, yend = K.a2), data = aux.df, linetype=6)+
+  
+  geom_segment(aes(x = PD.l3, y = 0, xend = PD.l3, yend = K.l3), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.h3, y = 0, xend = PD.h3, yend = K.h3), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.l3, y = K.l3, xend = PD.h3, yend = K.h3), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.a2, y = K.a2, xend = PD.a2, yend = 0), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.a2, y = K.s3, xend = 0, yend = K.s3), data = aux.df, linetype=5)+
+  geom_segment(aes(x = PD.a2, y = K.a2, xend = 0, yend = K.a2), data = aux.df, linetype=5)+
+  
+  
+  theme_bw()+
+  theme(axis.ticks = element_blank(),
+        axis.line = element_line(),
+        panel.grid = element_blank())+
+  expand_limits(x = 0, y = 0)+
+  scale_x_continuous("",breaks=c(PD.l,PD.a,PD.h),labels=c("Low PD","Mean PD","High PD"),expand = c(0, 0))+
+  scale_y_continuous("",breaks=c(K.s,K.a),labels=c("",""),expand = c(0, 0)) 
+  
+
+```
+## Capital Savings and Cyclicality
+
+
+```{r , echo=FALSE}
+
+dep.vars <- c("log.RWA.r_gr",
+              "log.RWA.r.Retail_gr",
+              "log.RWA.r.Wholesale_gr",
+              "log.RWA.r.Corporate_gr",
+              "log.RWA.r.Sovereign_gr",
+              "log.RWA.r.Banks_gr")
+dep.text <- c("$j = \\text{Total}$",
+              "$j = \\text{Retail}$", 
+              "$j = \\text{Wholesale}$", 
+              "$j = \\text{Corporate}$", 
+              "$j = \\text{Sovereign}$", 
+              "$j = \\text{Banks}$")
+# Independent variables
+aux.1 <- c("log.gdp_gr")
+aux.2 <- paste(aux.1, collapse=" + ")
+ind.vars <- c(aux.2)
+ind.text <- c("$\\Delta\\text{Log GDP}_{i,t}$")
+# Fixed effects
+fe       <- c(rep("year + bvdid"  , length(dep.vars)))
+fe.list <- list(c("Bank FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))),
+                c("Year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))))
+
+
+# Model formulas
+formula.text <- paste0(paste0(dep.vars)," ~ ", paste0(ind.vars), " | ", paste0(fe), " | 0 | 0 ")
+formulas <- lapply(formula.text, formula)
+
+# Run the models
+reg.list <- lapply(formulas, function(x) {
+  felm(x, data = filter(bank.data.win, RWA.s>0))
+})
+
+# Robust standard errors
+se.list  <-  lapply(reg.list, function(x){
+  summary(x, robust=TRUE)$coefficients[,2]
+})
+
+```
+
+\centering 
+```{r , eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+stargazer(reg.list,
+          #title = "Capital Savings and Cyclicality",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Log RWA}_{i,j,t}^{s} = \\beta\\times \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*}}",
+          #omit.table.layout = "n",
+          dep.var.labels   = dep.text,
+          covariate.labels = ind.text,
+          se               = se.list,
+          add.lines        = fe.list,
+          #keep            = c("log.gdp_gr"),
+          keep.stat        = c("n","rsq"),
+          header           = FALSE, 
+          type             = "latex",
+          font.size        = "tiny",
+          notes.label      = "",
+          notes.align      = "c", 
+          notes.append     = FALSE,
+          label            = "tab1",
+          style            = "qje",
+          column.sep.width = "0pt",
+          float            = FALSE,
+          #float.env        = "sidewaystable",
+          align            = TRUE,
+          no.space         = FALSE)
+```
+
+## Effect on Capital Ratio
+
+
+```{r , echo=FALSE}
+
+dep.vars <- c("log.CAR_gr", 
+              "log.K_gr", 
+              "log.RWA.IRB_gr", 
+              "log.RWA.hat_gr", 
+              "log.RWA.r_gr")
+dep.text <- c("$\\Delta\\text{Log Capital Ratio}_{i,t}$",
+              "$\\Delta\\text{Log Capital}_{i,t}$", 
+              "$\\Delta\\text{Log RWA}_{i,t}$", 
+              "$\\Delta\\text{Log RWA}^{c}_{i,t}$", 
+              "$\\Delta\\text{Log RWA}^{s}_{i,t}$")
+# Independent variables
+aux.1 <- c("log.gdp_gr")
+aux.2 <- paste(aux.1, collapse=" + ")
+ind.vars <- c(aux.2)
+ind.text <- c("$\\Delta\\text{Log GDP}_{i,t}$")
+# Fixed effects
+fe       <- c(rep("year + bvdid"  , length(dep.vars)))
+fe.list <- list(c("Bank and year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))))
+
+
+# Model formulas
+formula.text <- paste0(paste0(dep.vars)," ~ ", paste0(ind.vars), " | ", paste0(fe), " | 0 | 0 ")
+formulas <- lapply(formula.text, formula)
+
+# Run the models
+reg.list <- lapply(formulas, function(x) {
+  felm(x, data = subset(bank.data, subset = !is.na(log.CAR_gr)))
+})
+
+# Robust standard errors
+se.list  <-  lapply(reg.list, function(x){
+  summary(x, robust=TRUE)$coefficients[,2]
+})
+
+# Effect 
+effect  <-  lapply(reg.list, function(x){
+  100*abs(x$coefficients)/abs(reg.list[[1]]$coefficients)
+})
+effect[5] <- 100*reg.list[[5]]$coefficients/reg.list[[1]]$coefficients
+effect.list <-  list(c("Effect (a)", sprintf("%.1f \\%%",effect)))
+
+#additional lines 
+
+add.list <- append(fe.list, effect.list, after = 0)
+```
+
+\centering 
+```{r , eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE,out.width = "1\\textwidth"}
+stargazer(reg.list,
+          #title = "Capital Savings and Cyclicality",
+          table.layout = "n=c-!d#-t-as-",
+          notes = "\\parbox[t]{5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Component}_{i,t} = \\beta\\times \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*}}",
+          #omit.table.layout = "n",
+          dep.var.labels   = dep.text,
+          covariate.labels = ind.text,
+          se               = se.list,
+          add.lines        = add.list,
+          column.labels    = c("Panel A: Actual"),
+          column.separate  = c(5),
+          #keep            = c("log.gdp_gr"),
+          keep.stat        = c("n","rsq"),
+          header           = FALSE, 
+          type             = "latex",
+          font.size        = "tiny",
+          notes.label      = "",
+          notes.align      = "c", 
+          notes.append     = FALSE,
+          label            = "tab1",
+          style            = "qje",
+          column.sep.width = "0pt",
+          float            = FALSE,
+          #float.env        = "sidewaystable",
+          align            = TRUE,
+          no.space         = FALSE)
+```
+\pause
+
+```{r , echo=FALSE}
+
+dep.vars <- c("log.CAR.til_gr", 
+              "log.K_gr", 
+              "log.RWA.til_gr", 
+              "log.RWA.bar_gr", 
+              "log.RWA.c_gr")
+dep.text <- c("$\\Delta\\text{Log Capital Ratio}_{i,t}$",
+              "$\\Delta\\text{Log Capital}_{i,t}$", 
+              "$\\Delta\\text{Log RWA}_{i,t}$", 
+              "$\\Delta\\text{Log RWA}^{c}_{i,t}$", 
+              "$\\Delta\\text{Log RWA}^{s}_{i,t}$")
+# Independent variables
+aux.1 <- c("log.gdp_gr")
+aux.2 <- paste(aux.1, collapse=" + ")
+ind.vars <- c(aux.2)
+ind.text <- c("$\\Delta\\text{Log GDP}_{i,t}$")
+# Fixed effects
+fe       <- c(rep("year + bvdid"  , length(dep.vars)))
+fe.list <- list(c("Bank and year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))))
+
+
+# Model formulas
+formula.text <- paste0(paste0(dep.vars)," ~ ", paste0(ind.vars), " | ", paste0(fe), " | 0 | 0 ")
+formulas <- lapply(formula.text, formula)
+
+# Run the models
+reg.list <- lapply(formulas, function(x) {
+  felm(x, data = subset(bank.data, subset = !is.na(log.CAR.til_gr)))
+})
+
+# Robust standard errors
+se.list  <-  lapply(reg.list, function(x){
+  summary(x, robust=TRUE)$coefficients[,2]
+})
+
+# Effect 
+effect.1  <-  lapply(reg.list, function(x){
+  100*abs(x$coefficients)/abs(reg.list[[1]]$coefficients)
+})
+effect.1[5] <- 100*reg.list[[5]]$coefficients/reg.list[[1]]$coefficients
+effect.list <-  list(c("Effect (b)", sprintf("%.1f \\%%",effect.1)))
+change      <- mapply("-", effect.1, effect, SIMPLIFY = FALSE)
+change.list <-  list(c("(a) - (b)", sprintf("%.1f \\%%",change)))
+#additional lines 
+
+add.list <- append(fe.list, change.list, after = 0)
+add.list <- append(add.list, effect.list, after = 0)
+```
+
+\centering 
+```{r , eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE,out.width = "1\\textwidth"}
+stargazer(reg.list,
+          #title = "Capital Savings and Cyclicality",
+          table.layout = "c-!d#-t-as-",
+          notes = "\\parbox[t]{5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Y}_{i,j,t} = \\beta\\times \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*}}",
+          omit.table.layout = "n",
+          dep.var.labels   = dep.text,
+          covariate.labels = ind.text,
+          se               = se.list,
+          add.lines        = add.list,
+          column.labels    = c("Panel B: Counterfactual"),
+          column.separate  = c(5),
+          #keep            = c("log.gdp_gr"),
+          keep.stat        = c("n","rsq"),
+          header           = FALSE, 
+          type             = "latex",
+          font.size        = "tiny",
+          notes.label      = "",
+          notes.align      = "c", 
+          notes.append     = FALSE,
+          label            = "tab1",
+          style            = "qje",
+          column.sep.width = "0pt",
+          float            = FALSE,
+          #float.env        = "sidewaystable",
+          align            = TRUE,
+          no.space         = FALSE)
+```
+
+## Moments
+
+```{r , echo=FALSE}
+
+dep.vars <- c("mean.PD_gr", "var.PD_gr", "skew.PD_gr",  "kurt.PD_gr")
+dep.text <- c("Mean"      , "Variance" , "Skewness"  , "Kurtosis")
+bank.data <- mutate(bank.data, crisis= ifelse(log.gdp_gr>0,0,1))
+# Independent variables
+aux.1 <- c("log.gdp_gr")
+aux.2 <- paste(aux.1, collapse=" + ")
+ind.vars <- c(aux.1)
+ind.text <- c("$\\Delta\\text{Log GDP}_{i,t}$")
+# Fixed effects
+fe       <- c(rep("year + bvdid"  , length(dep.vars)))
+fe.list <- list(c("Bank FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))),
+                c("Year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))))
+
+
+# Model formulas
+formula.text <- paste0(paste0(dep.vars)," ~ ", paste0(ind.vars), " | ", paste0(fe), " | 0 | 0 ")
+formulas <- lapply(formula.text, formula)
+
+# Run the models
+reg.list <- lapply(formulas, function(x) {
+  felm(x, data = bank.data.win)
+})
+
+# Robust standard errors
+se.list  <-  lapply(reg.list, function(x){
+  summary(x, robust=TRUE)$coefficients[,2]
+})
+
+
+```
+
+\centering 
+```{r , eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE, fig.align = 'center'}
+stargazer(reg.list,
+          #title = "Capital Savings and Cyclicality",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Moment}_{i,t} = \\beta\\times \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*}}",
+          #omit.table.layout = "n",
+          dep.var.labels   = dep.text,
+          covariate.labels = ind.text,
+          se               = se.list,
+          add.lines        = fe.list,
+          #keep            = c("log.gdp_gr"),
+          keep.stat        = c("n","rsq"),
+          header           = FALSE, 
+          type             = "latex",
+          font.size        = "tiny",
+          notes.label      = "",
+          notes.align      = "c", 
+          notes.append     = FALSE,
+          label            = "tab1",
+          style            = "qje",
+          column.sep.width = "0pt",
+          float            = FALSE,
+          #float.env        = "sidewaystable",
+          align            = TRUE,
+          no.space         = FALSE)
+```
+## Capital Savings and Bank Characteristics
+```{r, echo=FALSE}
+
+dep.vars <- c("RWA.r",
+              "RWA.r.Retail",
+              "RWA.r.Wholesale",
+              "RWA.r.Corporate",
+              "RWA.r.Sovereign",
+              "RWA.r.Banks")
+dep.text <- c("$j = \\text{Total}$",
+              "$j = \\text{Retail}$", 
+              "$j = \\text{Wholesale}$", 
+              "$j = \\text{Corporate}$", 
+              "$j = \\text{Sovereign}$", 
+              "$j = \\text{Banks}$")
+# Independent variables
+aux.1 <- c("lag(log.asset , order_by = year)",
+           "lag(NPL.ratio, order_by = year)",
+           "lag(capital.ratio, order_by = year)")
+aux.3 <- paste(aux.1, collapse=" + ")
+ind.vars <- c(aux.3)
+ind.text <- c("$\\text{Log Total Assets}_{i,t-1}$",
+              "$\\text{NPL Ratio}_{i,t-1}$",
+              "$\\text{Capital Ratio}_{i,t-1}$",
+              "$\\text{ROE}_{i,t-1}$",
+              "$\\text{Capital Strigency}_{i,t-1}$",
+              "$\\text{Supervisory Power}_{i,t-1}$")
+
+# Fixed effects
+fe       <- c(rep("year + bvdid"  , length(dep.vars)))
+fe.list <- list(c("Bank FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))),
+                c("Year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))))
+
+
+# Model formulas
+formula.text <- paste0(paste0(dep.vars)," ~ ", paste0(ind.vars), " | ", paste0(fe), " | 0 | 0 ")
+formulas <- lapply(formula.text, formula)
+
+# Run the models
+reg.list <- lapply(formulas, function(x) {
+  felm(x, data = bank.data.win)
+})
+
+# Robust standard errors
+se.list  <-  lapply(reg.list, function(x){
+  summary(x, robust=TRUE)$coefficients[,2]
+})
+
+```
+
+\centering 
+```{r , eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+stargazer(reg.list,
+          #title = "Capital Savings and Bank Characteristics",
+          table.layout = "n=c=d#-t-as-",
+          notes = "\\parbox[t]{5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{RWA}_{i,j,t}^{s} = \\beta\\times X_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*}}",
+          #omit.table.layout = "n",
+          dep.var.labels   = dep.text,
+          covariate.labels = ind.text,
+          se               = se.list,
+          add.lines        = fe.list,
+          #keep            = c("log.gdp_gr"),
+          keep.stat        = c("n","rsq"),
+          header           = FALSE, 
+          type             = "latex",
+          font.size        = "tiny",
+          notes.label      = "",
+          notes.align      = "c", 
+          notes.append     = FALSE,
+          label            = "tab1",
+          style            = "qje",
+          column.sep.width = "-5pt",
+          float            = FALSE,
+          #float.env        = "sidewaystable",
+          align            = TRUE,
+          no.space         = FALSE)
+```
+
+
+## Conclusion
+
+- Capital Savings due to the concavity of  are economically relevant.
+
+- Countercyclical nature may offer another policy tool to reduce procyclicality of capital regulation.
+
+- Potential risk: banks can use same effect to increase average risk while keeping capital requirements constant.
+
+
+## References
+\tiny
