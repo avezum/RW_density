@@ -24,6 +24,7 @@ load("Data/Temp/BankScope.Rda")
 load("Data/Temp/Pillar3Data.Rda")
 load("Data/Temp/AuxiliarData.Rda")
 
+
 ##============================================================================##
 ## Pillar-III reports                                                         ##
 ##============================================================================##
@@ -233,10 +234,10 @@ bank.data <- bank.data%>%
   # Add macro variables
   left_join(WDI, by = c("Country", "year")) %>%
   # Add bank regulation variables
-  mutate(survey = ifelse(year<2001, 1, 
-                         ifelse(between(year, 2001, 2004), 2, 
-                                ifelse(between(year, 2005, 2007), 3, 4))))%>%
-  left_join(BRSS, by = c("Country", "survey"))
+  # mutate(survey = ifelse(year<2001, 1, 
+  #                        ifelse(between(year, 2001, 2004), 2, 
+  #                               ifelse(between(year, 2005, 2007), 3, 4))))%>%
+  left_join(BRSS, by = c("Country", "year"))
 
 #------------------------------------------------------------------------------#
 # Basic cleaning and variable calculation                                      #
@@ -313,7 +314,7 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           Zscore     = (r.mean.ROA + r.mean.CAR)/r.sd.ROA)%>%
    # Growth rates
    ungroup() %>% group_by(bvdid) %>%
-   mutate_at(vars(matches("log.|.ratio")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
+   mutate_at(vars(matches("_|log.|.ratio")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
                                                                     . - lag(., order_by = year), NA))) %>%
    mutate_at(vars(matches(".PD")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
                                                             log(.) - log(lag(., order_by = year)), NA))) %>%

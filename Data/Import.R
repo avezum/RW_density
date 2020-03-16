@@ -66,17 +66,18 @@ country.code <- read.csv("Data/Raw/WDI/WDICountry.csv") %>%
   select(country.name = short.name,
          Country      = x2.alpha.code)
 
-BRSS <- read_xls("Data/Raw/BRSS/BCL_Sup_Reg_Data_13JAN2013.xls",sheet = 4) %>%
-  select(-c("Number","Question response"),-contains("value"))%>%
-  pivot_longer(-c('Name','Survey'), names_to = "Country", values_to = "value")%>%
-  pivot_wider(names_from = Name, values_from = value)%>%
-  filter(!is.na(Survey))%>%
-  rename_at(vars(matches("[|]|*")),funs(str_replace_all(., "\\(|\\)|\\[|\\]|\\*|[0-9]", "")))%>%
-  rename_all(tolower) %>%
-  mutate_at(vars(-country),as.numeric)%>%
-  select_if(~!all(is.na(.)))%>%
-  select(survey, country.name = country, ovr_cap_string, init_cap_strin, cap_reg, sup_power)%>%
-  inner_join(country.code)
+# BRSS <- read_xls("Data/Raw/BRSS/BCL_Sup_Reg_Data_13JAN2013.xls",sheet = 4) %>%
+#   select(-c("Number","Question response"),-contains("value"))%>%
+#   pivot_longer(-c('Name','Survey'), names_to = "Country", values_to = "value")%>%
+#   pivot_wider(names_from = Name, values_from = value)%>%
+#   filter(!is.na(Survey))%>%
+#   rename_at(vars(matches("[|]|*")),funs(str_replace_all(., "\\(|\\)|\\[|\\]|\\*|[0-9]", "")))%>%
+#   rename_all(tolower) %>%
+#   mutate_at(vars(-country),as.numeric)%>%
+#   select_if(~!all(is.na(.)))%>%
+#   select(survey, country.name = country, ovr_cap_string, init_cap_strin, cap_reg, sup_power)%>%
+#   inner_join(country.code)
+load("Data/Raw/BRSS/Output/BRSS.Rdata")
   
   save(list = c("basel.indicator","EBA.indicator","WDI","BRSS"),
        file=paste0("Data/Temp/AuxiliarData.Rda"))
