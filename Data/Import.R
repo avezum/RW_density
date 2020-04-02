@@ -8,11 +8,12 @@
 ## Code setup                                                                  ##
 ##=============================================================================##
 
-rm(list = ls()) 
+
 library(tidyverse)    ## Data manipulation, pipe operator                                                             
 library(readxl)       ## Command to open xlsx files                                                     
 library(data.table)   ## Command to bind lists
 library(stringr)      ## Command to clean variables names in Orbis
+rm(list = ls()) 
 
 ##============================================================================##
 ## Auxiliar data                                                              ##
@@ -41,7 +42,8 @@ country.code <- read.csv("Data/Raw/WDI/WDICountry.csv") %>%
          Country = x2.alpha.code)
 
 WDI <- read.csv("Data/Raw/WDI/WDIData.csv") %>%
-  filter(Indicator.Code %in% c("NY.GDP.DEFL.ZS","NY.GDP.PCAP.KD","NY.GDP.PCAP.KN", "PA.NUS.FCRF", "PX.REX.REER")) %>%
+  filter(Indicator.Code %in% c("NY.GDP.DEFL.ZS","NY.GDP.PCAP.KD","NY.GDP.PCAP.KN", "PA.NUS.FCRF", "PX.REX.REER",
+                               "FS.AST.DOMS.GD.ZS","FS.AST.PRVT.GD.ZS","FD.AST.PRVT.GD.ZS")) %>%
   rename_all(funs(str_replace_all(.,"([\\w])([0-9]+)$", "\\1\\.\\2"))) %>%
   reshape(varying   = c(grep("X.", names(.))),
                       direction = 'long', 
@@ -52,11 +54,14 @@ WDI <- read.csv("Data/Raw/WDI/WDIData.csv") %>%
           timevar   = 'Indicator.Code') %>%
   rename_all(tolower) %>%
   inner_join(country.code)%>%
-  select(deflator = x.ny.gdp.defl.zs,
-         gdppc.us = x.ny.gdp.pcap.kd,
-         gdppc    = x.ny.gdp.pcap.kn,
-         er       = x.pa.nus.fcrf,
-         reer     = x.px.rex.reer,
+  select(deflator        = x.ny.gdp.defl.zs,
+         gdppc.us        = x.ny.gdp.pcap.kd,
+         gdppc           = x.ny.gdp.pcap.kn,
+         er              = x.pa.nus.fcrf,
+         reer            = x.px.rex.reer,
+         credit_gdp      = x.fs.ast.doms.gd.zs,
+         priv_credit_gdp = x.fs.ast.prvt.gd.zs,
+         bank_credit_gdp = x.fd.ast.prvt.gd.zs,
          year,
          Country)
 
