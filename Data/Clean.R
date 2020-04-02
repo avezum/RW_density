@@ -276,9 +276,9 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           tier          = 100*(tier1capitalmillcu/RWA),
           CAR.hat       = 100*(totalcapitalmillcu/RWA.hat.total),
           tier.hat      = 100*(tier1capitalmillcu/RWA.hat.total),
-          CAR.dif.alt   = ifelse(EAD.IRB == 0 & IRB == 0, 0,totalcapitalratio - CAR.alt),
-          CAR.dif       = ifelse(EAD.IRB == 0 & IRB == 0, 0,CAR - CAR.hat),
-          tier.dif      = ifelse(EAD.IRB == 0 & IRB == 0, 0,tier - tier.hat),
+          CAR.dif.alt   = ifelse(EAD.IRB == 0 & IRB == 0, 0, totalcapitalratio - CAR.alt),
+          CAR.dif       = ifelse(EAD.IRB == 0 & IRB == 0, 0, CAR - CAR.hat),
+          tier.dif      = ifelse(EAD.IRB == 0 & IRB == 0, 0, tier - tier.hat),
           log.CAR       = log(CAR),
           log.CAR.til   = log(CAR.til),
           log.K         = log(totalcapitalmillcu),
@@ -314,20 +314,18 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           Zscore     = (r.mean.ROA + r.mean.CAR)/r.sd.ROA)%>%
    # Growth rates
    ungroup() %>% group_by(bvdid) %>%
-   mutate_at(vars(matches("_|log.|.ratio")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
+   mutate_at(vars(matches("log.|.ratio|RW.s|RW.SA|q.")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
                                                                     . - lag(., order_by = year), NA))) %>%
-   mutate_at(vars(matches(".PD")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
+   mutate_at(vars(matches("_gdp|.PD")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
                                                             log(.) - log(lag(., order_by = year)), NA))) %>%
   # Remove IRB not collected  
    mutate(IRB.indicator = mean(IRB),
           not.collect   = ifelse(IRB.indicator >0 & sample == "No", 1, 0)) %>%
    filter(not.collect == 0) %>%
    # Remove auxiliar variables
-   select(everything(), -contains("Portfolio"),
-          -starts_with("r."), -c("not.collect", "IRB.indicator")) 
-
-# Save clean data frame
-save(bank.data,file=paste0("Data/Datasets/BankData.Rda"))
+   select(bvdid, name, Country, year, RWA.r, RW.s, RWA.s,  
+          contains(c("log.", ".ratio", "_gr", ".PD", "_", "q.")),
+          ROE, ROA, subordinated, Zscore, leverage) 
 
 ##============================================================================##
 ## RW decompostion datasets                                                   ##
@@ -335,10 +333,118 @@ save(bank.data,file=paste0("Data/Datasets/BankData.Rda"))
 
 # Auxiliar table used to include all bank observations when calculating the mean benchmark
 sample <- pillar3.data %>% 
-  distinct(bvdid, name, Country, .keep_all = FALSE)
+  distinct(bvdid, name, Country,year, .keep_all = FALSE)
+
+#----------------------------------------------------------------------------#
+# Bank-year decompostion                                                     #
+#----------------------------------------------------------------------------#
+
+## SA portfolio exposure decomposition 
+bank.year.decomposition <- SA.data %>% 
+  group_by(name, bvdid, Country, year) %>%
+  summarise(RWA.SA = sum(RWA, na.rm = TRUE),
+            EAD.SA = sum(EAD, na.rm = TRUE))%>%
+  ungroup()%>%
+  full_join(sample, by=c("bvdid", "name", "Country", "year"))%>%
+  mutate(RW.SA       = RWA.SA/EAD.SA,
+         mean.RWA.SA = mean(RWA.SA, na.rm = TRUE),
+         mean.EAD.SA = mean(EAD.SA, na.rm = TRUE),
+         mean.RW.SA  = mean.RWA.SA/mean.EAD.SA)%>%
+  ungroup()
+
+## IRB portfolios exposures decomposition 
+for(i in c("Wholesale", "Retail", "Equity")) {
+  bank.year.decomposition <- IRB.data %>% 
+    group_by(name, bvdid, Country, year, Portfolio_1) %>%
+    filter(Portfolio_1 %in% c(i)) %>%
+    summarise(!!(paste("RWA",        i, sep=".")) := sum(RWA    , na.rm = TRUE),
+              !!(paste("RWA", "hat", i, sep=".")) := sum(RWA.hat, na.rm = TRUE),
+              !!(paste("EAD",        i, sep=".")) := sum(EAD    , na.rm = TRUE))%>%
+    ungroup()%>%
+    full_join(sample, by=c("bvdid", "name", "Country", "year"))%>%
+    mutate(!!(paste(       "RWA", "s"  , i, sep=".")) :=      get(paste(        "RWA", "hat", i, sep="."))-get(paste("RWA", i, sep=".")),
+           !!(paste(       "RW" , "hat", i, sep=".")) :=      get(paste(        "RWA", "hat", i, sep="."))/get(paste("EAD", i, sep=".")),
+           !!(paste(       "RW" , "IRB", i, sep=".")) :=      get(paste(        "RWA",        i, sep="."))/get(paste("EAD", i, sep=".")),
+           !!(paste("mean","RWA",        i, sep=".")) := mean(get(paste(        "RWA",        i, sep=".")), na.rm = TRUE),
+           !!(paste("mean","RWA", "hat", i, sep=".")) := mean(get(paste(        "RWA", "hat", i, sep=".")), na.rm = TRUE),
+           !!(paste("mean","EAD",        i, sep=".")) := mean(get(paste(        "EAD",        i, sep=".")), na.rm = TRUE),
+           !!(paste("mean","RWA", "s"  , i, sep=".")) :=      get(paste("mean", "RWA", "hat", i, sep="."))-get(paste("mean", "RWA", i, sep=".")),
+           !!(paste("mean","RW" , "hat", i, sep=".")) :=      get(paste("mean", "RWA", "hat", i, sep="."))/get(paste("mean", "EAD", i, sep=".")),
+           !!(paste("mean","RW" , "IRB", i, sep=".")) :=      get(paste("mean", "RWA",        i, sep="."))/get(paste("mean", "EAD", i, sep="."))) %>%
+    full_join(bank.year.decomposition,by=c("bvdid","name","Country", "year"))
+}
+
+## Create portfolio shares, benchmarks, and remaning variables
+bank.year.decomposition <- bank.year.decomposition %>%
+  rowwise() %>%
+  mutate(EAD.IRB     = sum(EAD.Wholesale, EAD.Retail, EAD.Equity, na.rm = TRUE),
+         EAD         = sum(EAD.IRB, EAD.SA, na.rm = TRUE),
+         RWA.IRB     = sum(RWA.Wholesale, RWA.Retail, RWA.Equity, na.rm = TRUE),
+         RW          = sum(RWA.IRB, RWA.SA, na.rm = TRUE)/EAD,
+         RW.IRB      = RWA.IRB/EAD.IRB,
+         RWA.s       = sum(RWA.s.Wholesale, RWA.s.Retail, RWA.s.Equity, na.rm = TRUE),
+         RWA.hat     = sum(RWA.hat.Wholesale, RWA.hat.Retail, RWA.hat.Equity, na.rm = TRUE),
+         RW.s        = RWA.s/EAD.IRB,
+         RW.hat      = RWA.hat/EAD.IRB,
+         q.SA        = EAD.SA/EAD,
+         q.Wholesale = EAD.Wholesale/EAD.IRB,
+         q.Retail    = EAD.Retail/EAD.IRB,
+         q.Equity    = EAD.Equity/EAD.IRB,
+         # Mean benchmark
+         mean.EAD.IRB     = sum(mean.EAD.Wholesale, mean.EAD.Retail, mean.EAD.Equity, na.rm = TRUE),
+         mean.RWA.IRB     = sum(mean.RWA.Wholesale, mean.RWA.Retail, mean.RWA.Equity, na.rm = TRUE),
+         mean.EAD         = sum(mean.EAD.IRB, mean.EAD.SA, na.rm = TRUE),
+         mean.RW          = sum(mean.RWA.IRB, mean.RWA.SA, na.rm = TRUE)/mean.EAD,
+         mean.RWA.s       = sum(mean.RWA.s.Wholesale, mean.RWA.s.Retail, mean.RWA.s.Equity, na.rm = TRUE),
+         mean.RW.s        = mean.RWA.s/mean.EAD.IRB,
+         mean.q.SA        = mean.EAD.SA/mean.EAD,
+         mean.q.Wholesale = mean.EAD.Wholesale/mean.EAD.IRB,
+         mean.q.Retail    = mean.EAD.Retail/mean.EAD.IRB,
+         mean.q.Equity    = mean.EAD.Equity/mean.EAD.IRB,
+         ## Replace missing RW's and q's with values that lead to zero contribution to total RW
+         RW.hat.Wholesale = ifelse(is.na(RW.hat.Wholesale),mean.RW.hat.Wholesale,RW.hat.Wholesale),
+         RW.hat.Retail    = ifelse(is.na(RW.hat.Retail),mean.RW.hat.Retail,RW.hat.Retail),
+         RW.hat.Equity    = ifelse(is.na(RW.hat.Equity),mean.RW.hat.Equity,RW.hat.Equity),
+         RW.IRB.Wholesale = ifelse(is.na(RW.IRB.Wholesale),mean.RW.IRB.Wholesale,RW.IRB.Wholesale),
+         RW.IRB.Retail    = ifelse(is.na(RW.IRB.Retail),mean.RW.IRB.Retail,RW.IRB.Retail),
+         RW.IRB.Equity    = ifelse(is.na(RW.IRB.Equity),mean.RW.IRB.Equity,RW.IRB.Equity),
+         RW.SA            = ifelse(is.na(RW.SA),mean.RW.SA,RW.SA))%>%
+  mutate_at(vars(contains("q.")), 
+            rlang::as_function(function(x) ifelse(is.na(x),0,x)))%>%
+  ## Components of decomposition WITH PD distribution effect
+  mutate(IRB.gain     = (1-mean.q.SA)*(mean.q.Wholesale*(RW.hat.Wholesale-mean.RW.hat.Wholesale)+
+                                         mean.q.Retail*(RW.hat.Retail-mean.RW.hat.Retail)+
+                                         mean.q.Equity*(RW.hat.Equity-mean.RW.hat.Equity)),
+         
+         mix.gain     = (1-mean.q.SA)*((q.Wholesale-mean.q.Wholesale)*(RW.hat.Wholesale)+
+                                         (q.Retail-mean.q.Retail)*(RW.hat.Retail)+
+                                         (q.Equity-mean.q.Equity)*(RW.hat.Equity)),
+         rollout.gain = (q.SA-mean.q.SA)*(RW.SA-RW.hat),
+         int.gain     = (1-mean.q.SA)*(mean.RW.s-RW.s),
+         ext.gain     = (q.SA-mean.q.SA)*(RW.s),
+         ## Common components between decompositions and net components
+         SA.gain    = mean.q.SA*(RW.SA-mean.RW.SA),
+         other.gain = SA.gain + IRB.gain + mix.gain + rollout.gain,
+         PD.gain    = int.gain + ext.gain,
+         total.gain = RW-mean.RW)%>%
+  select(bvdid, name, Country, year,
+         IRB.gain, mix.gain, rollout.gain, int.gain, ext.gain, SA.gain, other.gain, PD.gain, total.gain)%>%
+  ungroup() %>% group_by(bvdid) %>%
+  mutate_at(vars(matches(".gain")), .funs = list(gr= ~ . - lag(., order_by = year))) 
+
+bank.data <- bank.data %>% 
+  full_join(bank.year.decomposition, by=c("bvdid","name","Country", "year"))
+
+# Save clean data frame
+save(bank.data,file=paste0("Data/Datasets/BankData.Rda"))
+
 #----------------------------------------------------------------------------#
 # Cross-section decompostion                                                 #
 #----------------------------------------------------------------------------#
+
+# Auxiliar table used to include all bank observations when calculating the mean benchmark
+sample <- pillar3.data %>% 
+  distinct(bvdid, name, Country, .keep_all = FALSE)
 
 ## SA portfolio exposure decomposition 
 cross.section.decomposition <- SA.data %>% 
@@ -440,6 +546,9 @@ cross.section.decomposition <- cross.section.decomposition %>%
          other.gain = SA.gain + IRB.gain + mix.gain + rollout.gain,
          PD.gain    = int.gain + ext.gain,
          total.gain = RW-mean.RW)%>%
+  select(bvdid, name, Country,
+         IRB.gain, mix.gain, rollout.gain, int.gain, ext.gain, SA.gain, other.gain, PD.gain, total.gain,
+         IRB.gain.alt, mix.gain.alt, rollout.gain.alt)%>%
   ungroup()
 
 # Save clean data frame
@@ -532,6 +641,8 @@ for(i in c("Wholesale", "Retail", "Equity")) {
          ext.gain     = (q.SA-t0.q.SA)*(RW.s),
          PD.gain      = int.gain + ext.gain,
          total.gain = RW-t0.RW)%>% ungroup() %>%
+    select(j, RW, t0.RW, IRB.gain, mix.gain, rollout.gain, int.gain, 
+           ext.gain, SA.gain, other.gain, PD.gain, total.gain)%>%
   assign(paste(j, "decomposition", sep="."),.,inherits = TRUE)
   # Save clean data frame
   save(list=paste0(j, ".decomposition"),
