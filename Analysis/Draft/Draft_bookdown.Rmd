@@ -80,6 +80,7 @@ library(ggpubr)               ## More plots
 
 source("../../Auxiliar/Function.R") ## Capital requirements functions
 source("../../Auxiliar/longtable.R") ## longtable for stargazer
+source("../../Auxiliar/adj_stargazer.R") ## adjust the first column width for stargazer
 
 
 ```
@@ -1424,7 +1425,7 @@ stargazer(header = FALSE, type="latex", single.row = TRUE, column.sep.width = "1
 \end{tabular}
 
 ```{r summary_control, fig.height = 10, fig.width = 7, results="asis",out.width = "1\\textwidth"}
-bank.data.win %>% select(
+table <- capture.output({bank.data.win %>% ungroup()%>% select(
   log.gdp_gr,
   log.gdp,
   credit_gdp,
@@ -1457,7 +1458,12 @@ stargazer(header = FALSE, type="latex", single.row = TRUE, column.sep.width = "1
           notes.append = FALSE,
           summary = TRUE,
           digits = 3,
-          float = FALSE)
+          float = FALSE)})
+
+table <- gsub("lccccc",
+              "p{0.4\\textwidth}ccccc", table, fixed = T)
+
+cat(table)
 ``` 
 
 \end{table}
