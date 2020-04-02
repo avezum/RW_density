@@ -324,7 +324,7 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
    filter(not.collect == 0) %>%
    # Remove auxiliar variables
    select(bvdid, name, Country, year, RWA.r, RW.s, RWA.s,  
-          contains(c("log.", ".ratio", "_gr", ".PD", "_", "q.")),
+          matches("log.|.ratio|_gr|.PD|_|q."),
           ROE, ROA, subordinated, Zscore, leverage) 
 
 ##============================================================================##
@@ -427,8 +427,7 @@ bank.year.decomposition <- bank.year.decomposition %>%
          other.gain = SA.gain + IRB.gain + mix.gain + rollout.gain,
          PD.gain    = int.gain + ext.gain,
          total.gain = RW-mean.RW)%>%
-  select(bvdid, name, Country, year,
-         IRB.gain, mix.gain, rollout.gain, int.gain, ext.gain, SA.gain, other.gain, PD.gain, total.gain)%>%
+  select(bvdid, name, Country, year, contains(".gain"))%>%
   ungroup() %>% group_by(bvdid) %>%
   mutate_at(vars(matches(".gain")), .funs = list(gr= ~ . - lag(., order_by = year))) 
 
@@ -546,9 +545,7 @@ cross.section.decomposition <- cross.section.decomposition %>%
          other.gain = SA.gain + IRB.gain + mix.gain + rollout.gain,
          PD.gain    = int.gain + ext.gain,
          total.gain = RW-mean.RW)%>%
-  select(bvdid, name, Country,
-         IRB.gain, mix.gain, rollout.gain, int.gain, ext.gain, SA.gain, other.gain, PD.gain, total.gain,
-         IRB.gain.alt, mix.gain.alt, rollout.gain.alt)%>%
+  select(bvdid, name, Country, contains(".gain"))%>%
   ungroup()
 
 # Save clean data frame
@@ -641,8 +638,7 @@ for(i in c("Wholesale", "Retail", "Equity")) {
          ext.gain     = (q.SA-t0.q.SA)*(RW.s),
          PD.gain      = int.gain + ext.gain,
          total.gain = RW-t0.RW)%>% ungroup() %>%
-    select(j, RW, t0.RW, IRB.gain, mix.gain, rollout.gain, int.gain, 
-           ext.gain, SA.gain, other.gain, PD.gain, total.gain)%>%
+    select(j, RW, t0.RW, contains(".gain"))%>%
   assign(paste(j, "decomposition", sep="."),.,inherits = TRUE)
   # Save clean data frame
   save(list=paste0(j, ".decomposition"),
