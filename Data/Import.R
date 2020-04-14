@@ -13,6 +13,8 @@ library(tidyverse)    ## Data manipulation, pipe operator
 library(readxl)       ## Command to open xlsx files                                                     
 library(data.table)   ## Command to bind lists
 library(stringr)      ## Command to clean variables names in Orbis
+library(zoo)          ## Command to replace missing values by other group's mean value 
+
 rm(list = ls()) 
 
 ##============================================================================##
@@ -39,11 +41,13 @@ EBA.indicator <- read_xlsx("Data/Raw/Pillar3/Auxiliar/Auxiliar.xlsx",sheet = 3) 
 country.code <- read.csv("Data/Raw/WDI/WDICountry.csv") %>%
   rename_all(tolower)%>%
   select(country.code = ï..country.code,
-         Country = x2.alpha.code)
+         Country = x2.alpha.code,
+         currency.unit)%>%
+  mutate(currency.unit = ifelse(country.code=="EMU", "Euro", as.character(currency.unit)))
 
 WDI <- read.csv("Data/Raw/WDI/WDIData.csv") %>%
   filter(Indicator.Code %in% c("NY.GDP.DEFL.ZS","NY.GDP.PCAP.KD","NY.GDP.PCAP.KN", "PA.NUS.FCRF", "PX.REX.REER",
-                               "FS.AST.DOMS.GD.ZS","FS.AST.PRVT.GD.ZS","FD.AST.PRVT.GD.ZS")) %>%
+                               "FS.AST.DOMS.GD.ZS","FS.AST.PRVT.GD.ZS","FD.AST.PRVT.GD.ZS", "FP.CPI.TOTL")) %>%
   rename_all(funs(str_replace_all(.,"([\\w])([0-9]+)$", "\\1\\.\\2"))) %>%
   reshape(varying   = c(grep("X.", names(.))),
                       direction = 'long', 
@@ -55,6 +59,7 @@ WDI <- read.csv("Data/Raw/WDI/WDIData.csv") %>%
   rename_all(tolower) %>%
   inner_join(country.code)%>%
   select(deflator        = x.ny.gdp.defl.zs,
+         cpi             = x.fp.cpi.totl,
          gdppc.us        = x.ny.gdp.pcap.kd,
          gdppc           = x.ny.gdp.pcap.kn,
          er              = x.pa.nus.fcrf,
@@ -63,7 +68,17 @@ WDI <- read.csv("Data/Raw/WDI/WDIData.csv") %>%
          priv_credit_gdp = x.fs.ast.prvt.gd.zs,
          bank_credit_gdp = x.fd.ast.prvt.gd.zs,
          year,
-         Country)
+         Country,
+         currency.unit)%>%
+  mutate(credit_gdp      = credit_gdp/100,
+         priv_credit_gdp = priv_credit_gdp/100,
+         bank_credit_gdp = bank_credit_gdp/100,
+         cpi             = cpi/100,
+         group.var       = ifelse(is.na(er)| Country == "XC", paste(currency.unit, year, sep = ""), NA),
+         er              = na.aggregate(er, by = group.var )) %>%
+  select(-group.var, -currency.unit)
+         
+
 
 # Bank Regulation and Supervision
 country.code <- read.csv("Data/Raw/WDI/WDICountry.csv") %>%
@@ -84,7 +99,7 @@ country.code <- read.csv("Data/Raw/WDI/WDICountry.csv") %>%
 #   inner_join(country.code)
 load("Data/Raw/BRSS/Output/BRSS.Rdata")
   
-  save(list = c("basel.indicator","EBA.indicator","WDI","BRSS"),
+  save(list = c("IRB.indicator","basel.indicator","EBA.indicator","WDI","BRSS"),
        file=paste0("Data/Temp/AuxiliarData.Rda"))
 
 ##============================================================================##
@@ -116,12 +131,12 @@ pillar3.data <- as.data.frame(pillar3.data) %>%
 pillar3.data <- IRB.indicator %>%
   select(name, bvdid = bvdid_new) %>% 
   distinct(bvdid, .keep_all = TRUE) %>%
-  inner_join(pillar3.data)
+  inner_join(pillar3.data) %>%
   # Add macro variables
-#  left_join(select(WDI, Country, year, reer), by = c("Country", "year")) %>%
+  left_join(select(WDI, Country, year, er), by = c("Country", "year")) %>%
   # Convert and deflate using REER
-#  mutate(EAD = EAD*reer,
-#         RWA = RWA*reer)
+  mutate(EAD = EAD/er,
+         RWA = RWA/er)
 
 # Save data frame
 save(pillar3.data,file=paste0("Data/Temp/Pillar3Data.Rda"))
@@ -190,13 +205,9 @@ bankscope <- bankscope %>%
   select(name,  Country, IRB, everything(), -contains("_"), -contains("."),
          -c("companyname", "countryisocode","lastavail", "id", "guoname", "conscode",
             "status", "listeddelistedunlisted", "delisteddate", "guobvdid", "guocountryisocode",
-            "guotype", "closingdate", "month", "1")) %>% 
+            "guotype", "closingdate", "month", "1", "IRB")) %>% 
   # Turn numeric variables to numeric format
   mutate_at(c(grep("usd", names(.))[1]:ncol(.)),as.numeric) 
-  # Convert and deflate using REER
-  #rowwise() %>%
-  #mutate_at(c(grep("lcu$", names(.))),
-  #          funs(.*reer))
 
 # Save data frame
 save(bankscope,file=paste0("Data/Temp/BankScope.Rda"))
