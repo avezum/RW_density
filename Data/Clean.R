@@ -176,8 +176,8 @@ for(i in c("Wholesale", "Retail", "Equity", "Corporate", "Sovereign", "Banks")) 
     full_join(sample, by=c("bvdid", "year"))%>%
     mutate(!!(paste("RW" ,"hat", i, sep=".")) := get(paste("RWA","hat", i , sep="."))/get(paste("EAD", i , sep=".")),
            !!(paste("RWA","s"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))-get(paste("RWA", i , sep=".")),
-           !!(paste("RWA","r"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))/get(paste("RWA", i , sep="."))-1,
-           !!(paste("RWA","c"  , i, sep=".")) := get(paste("RWA","bar", i, sep="."))/get(paste("RWA","til" ,i , sep="."))-1,
+           !!(paste("RWA","r"  , i, sep=".")) := get(paste("RWA","hat", i, sep="."))/get(paste("RWA", i , sep=".")),
+           !!(paste("RWA","c"  , i, sep=".")) := get(paste("RWA","bar", i, sep="."))/get(paste("RWA","til" ,i , sep=".")),
            !!(paste("RW" ,"s"  , i, sep=".")) := ifelse(get(paste("EAD", i, sep=".")) == 0, 0,
                                                  get(paste("RWA","s", i , sep="."))/get(paste("EAD", i , sep=".")))) %>% 
     select(bvdid, year, contains(i)) %>%
@@ -225,7 +225,8 @@ bank.data <- bank.data%>%
   # mutate(survey = ifelse(year<2001, 1, 
   #                        ifelse(between(year, 2001, 2004), 2, 
   #                               ifelse(between(year, 2005, 2007), 3, 4))))%>%
-  left_join(BRSS, by = c("Country", "year"))
+  left_join(select(BRSS, Country, cap_reg, Sup_Power, year, pillarI_stringency), by = c("Country", "year"))%>%
+  left_join(distinct(select(BRSS, Country, country.name), country.name, .keep_all = TRUE ), by = c("Country"))
 
 #------------------------------------------------------------------------------#
 # Basic cleaning and variable calculation                                      #
@@ -300,7 +301,7 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
           Zscore     = (r.mean.ROA + r.mean.CAR)/r.sd.ROA)%>%
    # Growth rates
    ungroup() %>% group_by(bvdid) %>%
-   mutate_at(vars(matches("q.")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
+   mutate_at(vars(matches("q.|.ratio|_gdp")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
                                                                     . - lag(., order_by = year), NA))) %>%
    mutate_at(vars(matches("RW.SA|.PD|RW.s")), .funs = list(gr= ~ifelse(. > 0 & lag(., order_by = year)>0, 
                                                                          log(.) - lag(log(.), order_by = year), NA))) %>%
@@ -311,7 +312,7 @@ bank.data <- bank.data %>% ungroup() %>% rowwise() %>%
    filter(not.collect == 0, IRB.indicator >0) %>%
    # Remove auxiliar variables
    select(bvdid, name, Country, year, 
-          matches("log.|.ratio|.PD|_|q.|.r.|.s."),
+          matches("log.|.ratio|.PD|_|q.|.r.|.s.|RW."),
           ROE, ROA, subordinated, Zscore, leverage) 
 
 ##============================================================================##
