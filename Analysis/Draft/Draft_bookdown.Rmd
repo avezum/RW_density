@@ -4,6 +4,7 @@ date: '\emph{\today}'
 output:
   bookdown::pdf_document2:
     fig_caption: yes
+    #citation_package: natbib
     latex_engine: pdflatex
     template: tex-ms.tex
   pdf_document: default
@@ -14,11 +15,11 @@ author:
 biblio-style: apsr
 bibliography: ../../Auxiliar/mybibfile.bib
 citecolor: black
-csl: ../../Auxiliar/cambridge-journal-of-economics.csl
+csl: ../../Auxiliar/Citation_styles/american-marketing-association.csl
 #anonymous: no
 fontsize: 11pt
 geometry: margin= 1in
-header-includes: \usepackage{rotating, graphicx, dcolumn, longtable, float, siunitx, tabularx}
+header-includes: \usepackage{rotating, graphicx, dcolumn, longtable, float, siunitx, tabularx, appendix} 
 keywords: Internal ratings-based models, Risk-weighted assets dispersion, Procyclicality
 linkcolor: black
 abstract: The Basel II accord introduced a concave mapping from probabilities of default
@@ -30,6 +31,7 @@ abstract: The Basel II accord introduced a concave mapping from probabilities of
   larger average component increases capital charges, a larger shape component generates
   capital savings. I investigate the relationship of these capital savings with the business cycle and find it to   be countercyclical. The results suggest that a recalibration of the current IRB framework can reduce considerably the procyclicality of capital regulation.
 spacing: double
+indent: true
 subtitle: ''
 thanks: Preliminary draft.
 JEL: G21, G28, G11
@@ -66,11 +68,13 @@ library(stargazer)            ## Latex tables
 library(lfe)                  ## High-dimensional fixed effects
 library(gridExtra)            ## Create grid for plots and tables
 library(cowplot)              ## Create grid for plots and tables
+library(multipanelfigure)     ## Create grid for figures
 library(DescTools)            ## Command to winsorize variables
 library(ggpubr)               ## More plots
 library(splitstackshape)      ## Command to expand data
 library(latex2exp)            ## Use latex code in plots
 library(lemon)                ## Plot brackets
+library(mosaic)               ## Package to calculate derivatives
 #library(textablr)
 #library(sandwich)
 #library(lmtest)
@@ -94,60 +98,64 @@ load("../../Data/Datasets/yeardecomposition.Rda")
 
 \section{Introduction} \label{sec:intro}
 
-The regulation on bank capital requirements has evolved substantially since the first international standard, the 1988 Basel Accord. At the heart of these changes is the link of capital charges to asset risk [@basel2004international; @BCBS2017basel; @EBA2019policy]. Risk sensitivity of capital requirements was present in the first accord and it was greatly enhanced in the Basel II framework by giving banks the option to calculate capital requirements using risk estimates obtained from their own models, known as the internal ratings-based (IRB) approach. The rationale for risk-linked capital charges is that regulating capital via a simple capital to asset ratio can incentivize banks to take on excessive risk [@koehn1980regulation; @kim1988risk; @gordy2010risk]. The rationale for allowing internal models is the better alignment of risk estimates to actual portfolio risk [@barakova2014banks] and the promotion of better risk management practices [@cucinelli2018credit]. 
+The regulation on bank capital requirements has evolved substantially since the first international standard, the 1988 Basel Accord. At the heart of these changes is the link of capital charges to asset risk [@BCBS2006international; @BCBS2017basel; @EBA2019policy]. Risk sensitivity of capital requirements was present in the first accord and it was greatly enhanced in the Basel II framework by giving banks the option to calculate capital requirements using risk estimates obtained from their own models, known as the internal ratings-based (IRB) approach. The rationale for risk-linked capital charges is that regulating capital via a simple capital to asset ratio can incentivize banks to take on excessive risk [@koehn1980regulation; @kim1988risk; @gordy2010risk]. The rationale for allowing internal models is the better alignment of risk estimates to actual portfolio risk [@barakova2014banks] and the promotion of better risk management practices [@cucinelli2018credit]. 
 
-However, both risk sensitivity and the use of internal models may have adverse consequences. First, linking capital charges to asset risks exacerbate the procyclicality of lending [@danielsson2001academic; @kashyap2004cyclical; @repullo2012procyclical; @behn2016procyclical]. As the overall credit quality deteriorates during economic downturns, capital requirements tighten, forcing banks to cut down lending. Second, the inherent flexibility of the IRB approach may allow for differences in capital requirements that do not reflect portfolio risk but rather modelling choices [@le2012revisiting; @mariathasan2014manipulation; @behn2016limits;@berg2017analysis; @ferribank]. 
+However, both risk sensitivity and the use of internal models may have adverse consequences. First, linking capital charges to asset risk exacerbate the procyclicality of lending [@danielsson2001academic; @kashyap2004cyclical; @repullo2012procyclical; @behn2016procyclical]. As the overall credit quality deteriorates during economic downturns, capital requirements tighten, forcing banks to reduce lending. Second, the inherent flexibility of the IRB approach may allow for differences in capital requirements across banks that do not reflect portfolio risk but rather modelling choices [@le2012revisiting; @mariathasan2014manipulation; @behn2016limits;@berg2017analysis; @ferribank]. 
 
-This paper contributes to understanding the cyclicality and variability of capital requirements by identifying the effects of an unexplored feature of the IRB framework on capital requirements. Under the IRB approach, banks supply their own risk estimates, such as probability of default (PD), to formulas set by the regulation which determine the amount of capital banks have to hold. Two characteristics of the framework are important for this analysis. First, the mapping from PD estimates to capital requirements is a concave function. Second capital requirements are calculated for each asset separately and then added up to reach total capital charges. Together, these characteristics imply that actual capital requirements are lower than if they were calculated using the average PD to the entire portfolio. For clarity, consider two portfolios. The first contains a low PD asset and a high PD asset in equal proportions. The second has the same total amount as the first but contains only a mean PD asset, where mean PD is the mean of low PD and high PD. Because of the concavity of the IRB formula, capital requirements for the second portfolio are greater than the first. More generally, total capital requirements depend not only on banks' portfolio average PD but also on the shape of the PD distribution. 
+This paper contributes to understanding the cyclicality and variability of capital requirements by identifying the effects of an unexplored feature of the IRB framework on capital requirements. Under the IRB approach, banks supply their own risk estimates, such as the probability of default (PD), to formulas set by the regulation which determine the amount of capital banks have to hold. Two characteristics of the framework are important for this analysis. First, the mapping from PD estimates to capital requirements is a concave function. Second, capital requirements are calculated for each asset separately and then added up to obtain the total capital charge. Because of these characteristics, actual capital requirements for a portfolio are lower than implied by the average PD of this portfolio. For clarity, consider two portfolios. The first contains a low PD asset and a high PD asset in equal proportions. The second has the same total amount as the first but contains only a mean PD asset, where mean PD is the mean of low PD and high PD. Because of the concavity of the IRB formula, capital requirements for the second portfolio are greater than capital requirements for the first. More generally, total capital requirements depend not only on banks' portfolio average PD but also on the shape of the PD distribution. 
 
-I propose a measure that decomposes the contribution of the PD distribution to capital requirements into an average component and a shape component. The method is straightforward: for each bank-year combination, compare actual capital requirements to the counterfactual case where requirements for the entire portfolio are calculated using the portfolio’s average PD. I label the shape component *Capital savings* because it reduces total capital requirements. 
+I propose a measure that decomposes the contribution of the PD distribution to capital requirements into an average component and a shape component. The average component is a counterfactual scenario such that the capital requirements for the entire portfolio are calculated using the portfolio’s average PD. The shape component is obtained as the difference between the average component and the actual amount of capital requirements. I label the shape component *Capital savings* because an increase of the shape component reduces total capital requirements. 
 
-To calculate measures of *Capital savings*, information on the distribution of banks' regulatory risk parameters is needed. I hand-collected information on the distribution of credit risk parameters from banks' Pillar-3 reports. As is common in the literature, I calculate *Capital savings* in terms of risk-weighted assets (RWA), which are simply capital requirements times 12.5, or risk-weights (RW), which are RWA divided by assets. The sample consists of 59 large banking groups that have adopted the IRB approach. The dataset covers 15 countries and goes from 2007 to 2018. Data at such granularity is not available in the common balance sheet datasets, and although very detailed, datasets from credit registers are restricted to one country, and may still lack the relevant information. 
+To calculate *Capital savings*, I hand-collected information on the distribution of credit risk parameters from banks' Pillar-3 reports. The sample consists of 59 large banking groups that have adopted the IRB approach. The dataset covers 15 countries and goes from 2007 to 2018. 
 
-With this novel dataset, I investigate the relationship between *Capital savings* and the business cycle. Prior evidence suggests that capital requirements are procyclical: during economic downturns banks tend to deleverage instead of raising capital. However, as credit conditions deteriorate (and banks react to these new credit conditions) the PD distribution and, consequently, the amount of *Capital savings*, also change. A priori, the direction of the business cycle effect on *Capital savings* is ambiguous. At one extreme, if the entire portfolio is equally affected, then there is only a shift of the location parameter of the PD distribution. Because the PD-RW formula elasticity is lower for higher PD estimates, in this scenario *Capital savings* are procyclical. On the other hand, if riskier assets are more sensitive to credit shocks, then capital savings are countercyclical. The ambiguity arises because *Capital savings* can only increase during a recession if the shape of the PD distribution is affected during the cycle.
+With this novel dataset, I investigate the relationship between *Capital savings* and the business cycle. Between the two capital requirement components, the average component is a source of the procyclicality as long the relationship between the business cycle and PD estimates is monotonic. Conversely, the direction of *Capital savings* during the business cycle is not trivial even when assuming a monotonic relationship between PD estimates and the business cycle. The ambiguity arises because *Capital savings* can only increase during a recession, and therefore be countercyclical, if the shape of the PD distribution is affected during the business cycle. If the PD estimates of the the assets in a portfolio are equally affected during the business cycle, then there is only a shift of the location parameter of the PD distribution. Because the PD elasticity of capital requirements is lower for higher PD estimates, in this scenario *Capital savings* are procyclical. On the other hand, if riskier assets are sufficiently more sensitive to credit shocks than safer assets, then *Capital savings* are countercyclical.  
 
-I find *Capital savings* to be countercyclical. I estimate that a 1.6% GDP growth rate (one standard deviation) decreases *Capital savings* by 0.7 percentage points on average. In other words, banks have to increase capital by 0.7 percentage points to keep their capital ratio constant. The effect is also economically significant. In a capital ratio decomposition exercise, I also find that the the cyclicality of *Capital savings* reduces the procyclicality of capital ratios by 23.7%. The results are robust to different measures of the shape component, such as, *Capital savings* in terms of ratios, *Capital savings* in monetary units, and using Gini coefficients.   
+I find *Capital savings* to be countercyclical. I estimate that a 1.7% GDP growth rate (one standard deviation) decreases the growth rate of *Capital savings* by 0.8 percentage points on average. In other words, given an average PD, banks have to increase capital by 0.8 percentage points to keep their capital ratio constant. The effect is also economically significant. The variation of *Capital savings* during the business cycle reduces the procyclicality of capital ratio by 23.7% on average. The results also suggest that the countercyclical relationship between GDP and *Capital savings* is mostly driven by wholesale portfolios, especially corporate portfolios. The results are robust to different measures of the shape component, to the inclusion of several control variables and the alternative sample selections. I also show that selection into the IRB approach does not explain the cyclicality of *Capital savings*.      
 
+I further analyse the relationship of the PD distribution moments with GDP growth and find that during economic recessions average and variance of PD distributions increase while the their skewness decrease. Although the effect of the average PD is stronger, which characterizes capital requirements as procyclical, both the higher variance and the lower skewness of the PD distribution mitigate the increase of capital requirements during recessions. Moreover, I argue that the change of skewness during the business cycle is consistent with a portfolio reallocation effect on *Capital savings*.
 
-I further analyse the relationship of the PD distribution moments with GDP growth and find that during economic expansions average PD and PD variance decrease while the PD skewness increase. This evidence implies that distributions become more symmetric and with less extreme values during recessions, suggesting a flight to safety behavior by banks. As the recession reduces their existing portfolio credit quality (evidenced by the negative coefficient of average PD) banks respond by reducing risk-taking.
-
-This papers contributes to two strands of the banking literature. First, several studies document significant RW variability across otherwise similar banks. Some take this evidence as indicative of either excessive subjectivity in the current capital requirement rules or risk measurement manipulation by banks to decrease capital charges [see, @mariathasan2014manipulation; @ferribank]. Others are more cautious and emphasize that part of RW variability is desirable since it reflects differences in risk among banks [@cannata2012inside; @BCBS2016regulatory;@berg2017analysis; @EBA2019result]. I contribute to the literature by showing that *Capital savings* are an important source of the RW variation across banks.  
+This papers contributes to two strands of the banking literature. First, several studies document significant capital requirements variability across otherwise similar banks. Some take this evidence as indicative of either excessive subjectivity in the current capital requirement rules or risk measurement manipulation by banks to decrease capital charges [see, @mariathasan2014manipulation; @ferribank]. Others are more cautious and emphasize that part of the capital requirements variability is desirable since it reflects differences in risk among banks [@cannata2012inside; @BCBS2016regulatory;@berg2017analysis; @EBA2019result]. I contribute to the literature by showing that *Capital savings* are an important source of capital requirements variation across banks.  
 
 Second, while the literature shows that capital requirements, especially for portfolios under the IRB approach, are on average procyclical [@danielsson2001academic; @kashyap2004cyclical; @repullo2012procyclical; @behn2016procyclical], I identify a countercyclical component of the current IRB framework. A better understanding of this countercyclical component can help policy makers designing a less procyclical regulation in the future.
 
-The remainder of this paper is organized as follows. Section \ref{sec:background describes the capital requirement formula under the IRB approach, why it creates *Capital savings*, and the hypothesis concerning the cyclicality of *Capital savings*. Section \ref{sec:data} describes the collected data and the measures of *Capital savings*. Section \ref{sec:cycle} presents evidence on the countercyclical feature of *Capital savings*. Section \ref{sec:reallocation} tests if *Capital savings* are affected by portfolio reallocation during the business cycle. Section \ref{sec:additional_results} presentes additional results. Finally, section \ref{sec:conclusion} concludes. 
+The remainder of this paper is organized as follows. Section \ref{sec:background} describes the capital requirement formula under the IRB approach, why it creates *Capital savings*, and the hypothesis concerning the cyclicality of *Capital savings*. Section \ref{sec:data} describes the collected data and the measures of *Capital savings*. Section \ref{sec:cycle} presents evidence on the countercyclical feature of *Capital savings*. Section \ref{sec:reallocation} tests if *Capital savings* are affected by portfolio reallocation during the business cycle. Section \ref{sec:additional_results} presents additional results. Finally, section \ref{sec:conclusion} concludes. 
 
 \section{Institutional Background and Hypotheses} \label{sec:background}
 
 \subsection{Capital Requirements under the IRB approach} \label{sec:cap_req}
 
-In June 2004, the Basel Committee issued a revised framework on international convergence of capital measurements and capital standards [@basel2004international], known as Basel II, which serves as the basis for national rulemaking and implementation processes. At the heart of the revision was the link of capital charges to asset risk. Since the first accord from 1988 (Basel I), minimum capital requirements are calculated as a percentage of risk-weighted assets. Hence, the approach to define risk-weights is of major importance. In Basel I, risk-weights were flat within portfolio categories. For instance, all sovereign exposures were weighted by 0% and all corporate exposures by 100%. However, regulating capital via a simple capital to asset ratio can incentivize banks to take on excessive risk as the cost in terms of capital requirements is the same within a portfolio category [@koehn1980regulation; @kim1988risk; @gordy2010risk]. Therefore, since Basel II, financial institutions may choose between two approaches to calculate capital requirements for credit risk; the standardized approach (essentially a slightly modified version of the first accord) and the IRB approach. 
+In June 2004, the Basel Committee issued a revised framework on international convergence of capital measurements and capital standards [@BCBS2006international], known as Basel II, which serves as the basis for national rulemaking and implementation processes. The link of capital charges to asset risk was at the heart of the revision. Since the first accord from 1988 (Basel I), minimum capital requirements are calculated as a percentage of risk-weighted assets (RWAs). Hence, choosing the approach that defines risk-weights is crucial. In Basel I, RWs were constant within portfolio categories. For instance, all sovereign exposures were weighted by 0% and all corporate exposures by 100%. However, regulating capital via a simple capital to asset ratio can incentivize banks to take on excessive risk as the cost in terms of capital requirements is the same within a portfolio category [@koehn1980regulation; @kim1988risk; @gordy2010risk]. Therefore, since Basel II, financial institutions may choose between two approaches to calculate capital requirements for credit risk; the standardized approach (essentially a slightly modified version of the first accord) and the IRB approach. 
 
-In the IRB approach, capital requirements are derived from risk-weight formulas that take as input banks' own estimates of credit risk parameters. The rationale for allowing internal models is the better alignment of risk estimates to actual portfolio risk [@barakova2014banks] and the promotion of better risk management practices [@cucinelli2018credit]. The basic regulatory formula derives from a model characterized by the property that the risk-weight of each asset depends only on the estimated credit risk parameters for this asset and not on the composition of the portfolio, i.e. the model is portfolio invariant. This feature leads to a bottom-up approach where capital requirements are determined on the asset level and total requirement is simply the sum of asset individual requirement. Equation \ref{eq:RW_function} is the risk-weight formula at its most simple form:  
+Under the IRB approach, banks are required to estimate their credit risk parameters using internal risk models. The risk parameters are the probability of default (PD), the loss given default (LGD), and the exposure at default (EAD). The main rationale for allowing internal models is the better alignment of regulatory risk estimates to actual portfolio risk [@barakova2014banks] as banks are expected to have better knowledge of and more resources to monitor their portfolio than supervisors have. Because the internal models have to be approved by the supervisors before implemented for regulatory purposes, regulators also expected the IRB approach to promote stronger risk management practices in the banking industry [@BCBS2006international; @cucinelli2018credit].
+
+The estimated risk parameters are then used in regulatory formulas for calculating risk-weights. The regulatory formulas comes from a model characterized by the property that the risk-weight of each asset depends only on the estimated credit risk parameters for this asset and not on the composition of the portfolio, i.e. the model is portfolio invariant. This feature leads to a bottom-up approach where capital requirements are determined on the asset level and total requirement is simply the sum of asset individual requirement. Equation \ref{eq:RW_function} is the risk-weight formula at its most simple form:  
 
 \begin{equation}
 \label{eq:RW_function}
 \text{RW}(\text{LGD}_i, \text{PD}_i)= 12.5\text{LGD}_i\bigg[ N\bigg(\sqrt{\frac{1}{1-R}}N^{-1}(\text{PD}_i)+\sqrt{\frac{R}{1-R}}N^{-1}(0.999)\bigg)-\text{PD}_i\bigg],
 \end{equation}
-where $i$ is an asset in the portfolio and $N$ is the standard normal cumulative distribution. Basel accords segment credit portfolios into several categories (for instance, corporate, sovereign or retail), each having different additional features (maturity adjustments, risk-dependent correlation coefficient, among others) while keeping the basic structure of equation \ref{eq:RW_function}. Because of the portfolio invariant feature of the model, average risk-weight $\text{RW}^f$ is the exposure weighted average of all individual assets' risk-weights, as shown in equation \ref{eq:RW_factual}:   
+where the subscript $i$ indexes an asset in the portfolio, $N$ is the standard normal cumulative distribution, and $R$ is a correlation coefficient. Basel accords segment credit portfolios into several categories each having different additional features while keeping the basic structure of equation \ref{eq:RW_function}. For instance, the correlation coefficient is a function of PD for wholesale exposures while it is constant at 15% for real estate exposures.[^1] Although the regulatory formulas are common for all banks the scope that banks are allowed to use their internal models varies. Under the foundation IRB (F-IRB) approach, banks can apply or be approved to use only internal PD estimates and are required to use values defined by the regulator for the other parameters. Only banks approved to the advanced IRB (A-IRB) approach can use internal estimates for all the risk parameters.
+
+Because of the portfolio invariant feature of the model, average risk-weight, $\text{RW}^f$, is the exposure weighted average of all individual assets' risk-weights, as shown in equation \ref{eq:RW_factual}:[^2]   
 
 \begin{equation}
 \label{eq:RW_factual}
-\text{RW}^f= \frac{\sum_{i}\text{EAD}_i \text{RW}(\text{LGD}_i, \text{PD}_i)}{\sum_{i}\text{EAD}_i}= \sum_{i}\text{q}_i \text{RW}(\text{LGD}_i, \text{PD}_i).
+\text{RW}^f= \sum_{i}q_i \text{RW}(\text{LGD}_i, \text{PD}_i).
 \end{equation}
-where $q_i= EAD_i/\sum_jEAD_j$. Thus, to calculated their capital requirements banks estimate three credit risk parameters: the exposure at default (EAD), the loss given default (LGD), and the probability of default (PD).[^1] The total amount of RWA for this portfolio is $\text{RW}^f\times \sum_i\text{EAD}_i$ and total capital requirements $\text{RWA}\times 8\%$.  
+where $q_i= \text{EAD}_i/\sum_j\text{EAD}_j$. The total amount of RWAs for this portfolio is $\text{RW}^f\times \sum_i\text{EAD}_i$ and total capital requirements $\text{RWA}\times 8\%$.  
 
-[^1]: For wholesale exposures (corporate, sovereign and banks) the effective maturity of the asset is another parameter and for SMEs annual sales turnover is used to adjust the correlation coefficient.  
+[^1]: Some other differences are maturity adjustments for wholesale exposures and the use of annual sales turnover to adjust the correlation coefficient for SMEs.  
+
+[^2]: The superscript $f$ (for factual) is used to differentiate the average value from the RW function.
 
 \subsection{Probability of Default Distribution and Capital Savings} \label{sec:PD_capital_savings}
 
-Figure \ref{fig:pdmap} plots the mapping from PD to RW according to equation \ref{eq:RW_function}. For this paper, the important characteristic of this mapping is that it is a concave function. The concavity of the PD-RW mapping together with the bottom-up method to aggregate capital requirements entail that actual capital requirements are lower than if they were calculated using the average PD to the entire portfolio. For clarity, consider two portfolios. The first contains a low PD asset and a high PD asset in proportions $q$ and $1-q$. The second has the same total amount as the first but contains only a mean PD asset, where mean PD is the mean of low PD and high PD weighted by their respective shares. Because of the concavity of the IRB formula and Jensen’s inequality, the capital requirement for the second portfolio is greater than the first. Figure \ref{fig:pdmap} illustrates the comparison. $\text{RW}^f$ and $\text{RW}^c$ are the average RW for the first portfolio and the second portfolio, respectively. More generally, total capital requirements do not depend only on the portfolio average PD but also on the shape of the PD distribution. 
-
-I propose a method that decomposes the contribution of the PD distribution to capital requirements into the average component and the shape component. The method is a generalization of the example in Figure \ref{fig:pdmap}: for each bank-year combination, I compare the actual capital requirement ($\text{RW}^f$) to the counterfactual case where the requirement for the entire portfolio is calculated using the portfolio’s average PD. The counterfactual RW is the average component of the PD distribution to capital requirements:  
+Figure \ref{fig:pdmap} plots the mapping from PD to risk-weights according to equation \ref{eq:RW_function}. For the purpose of this paper, the important characteristic of this mapping is that it is a concave function. The concavity of the regulatory formula together with the bottom-up method to aggregate capital requirements entail that total capital requirements for a portfolio do not depend only on the portfolio average PD but also on the shape of the PD distribution. For clarity, consider two portfolios. The first contains a low PD asset and a high PD asset in proportions $q$ and $1-q$. The second has the same amount of exposure as the first but contains only a mean PD asset, where mean PD is the mean of low PD and high PD weighted by their respective shares. Because of the concavity of the IRB formula and Jensen’s inequality, the capital requirement for the second portfolio is greater than the first. Figure \ref{fig:pdmap} illustrates the comparison. $\text{RW}^f$ and $\text{RW}^c$ are the average risk-weight for the first portfolio and the second portfolio, respectively. More generally, any PD distribution with positive variance is charged with capital requirements lower than implied by the average of the distribution.   
+I propose a method that decomposes the contribution of the PD distribution to capital requirements into the average component and the shape component. The method is a generalization of the example in Figure \ref{fig:pdmap}. The average component is the amount of capital requirements if the portfolio’s average PD is used for the entire portfolio. Similar to $\text{RW}^c$ in Figure \ref{fig:pdmap}, the average component is defined as the following:  
 
 \begin{equation}
 \label{eq:RW_counterfactual}
-\text{RW}^c= \sum_{i}\text{q}_i \text{RW}(\text{LGD}_i,\overline{\text{PD}}),
+\text{RW}^c= \sum_{i}q_i \text{RW}(\text{LGD}_i,\overline{\text{PD}}),
 \end{equation}
 where the PD parameter for all assets is replaced by the portfolio weighted average. The latter is defined as the following:
 
@@ -155,48 +163,83 @@ where the PD parameter for all assets is replaced by the portfolio weighted aver
 \overline{\text{PD}}=\frac{\sum_i\text{EAD}_i\text{LGD}_i\text{PD}_i}{\sum_i\text{EAD}_i\text{LGD}_i}.
 \end{equation*}
 
-The difference between $\text{RW}^c$ and $\text{RW}^f$ measures any contribution to capital requirements from the PD distribution that is no related to the location of this distribution, i.e., it is a measure of the shape component. It can also be interpreted as the amount of *Capital savings* per unit of EAD due to the concavity of the IRB formula and the shape of the PD distribution. Equation \ref{eq:RW_savings} shows one of the possibilities to measure *Capital savings*: 
+The difference between $\text{RW}^c$ and $\text{RW}^f$ measures any contribution to capital requirements from the PD distribution that is not related to the location of this distribution, i.e., it is a measure of the shape component. It can also be interpreted as the amount of *Capital savings* per unit of EAD due to the concavity of the IRB formula and the shape of the PD distribution. I define this intensity measure of *Capital savings* as the following: 
 
 \begin{equation}
 \label{eq:RW_savings}
 \text{RW}^{s}=\text{RW}^c-\text{RW}^f.
 \end{equation}
 
-Note that I defined *Capital savings* such that positive values translate to lower actual capital requirements and consequently $\text{RW}^s \geq 0$.
+The total amount of *Capital savings* is simply $\text{RW}^{s}$ multiplied by total EAD in the portfolio as follows:  
+
+\begin{equation}
+\label{eq:measure2}
+\text{RWA}^{\$}=\text{RWA}^c-\text{RWA}^f=\text{RW}^{s}\times \sum_i\text{EAD}_i.
+\end{equation}
+
+Because this is a measure in monetary units, $\text{RWA}^{\$}$ is mechanically larger for larger banks and they increase as the portfolio rolls out to the IRB approach. 
+
+An alternative way to measure the intensity of *Capital savings* is the ratio of equation \ref{eq:RW_counterfactual} to equation \ref{eq:RW_factual} as follows:
+
+\begin{equation}
+\label{eq:measure1}
+\text{RWA}^s=\frac{\text{RWA}^c}{\text{RWA}^f}.
+\end{equation}
+
+$\text{RWA}^s$ is the rate at which a bank saves capital. For instance, a value of 1.5 means this portfolio would require 50% more capital in the absence of *Capital savings* to keep the same capital ratio. A value of one means that there are no *Capital savings* and implies a portfolio with a degenerate PD distribution. Any PD distribution with positive variance results in positive *Capital savings*. 
+
+$\text{RWA}^s$ is also my preferred measure of *Capital savings* because it is the most straightforward measure to evaluate the impact of *Capital savings* on the capital ratio during the business cycle. In the empirical analysis, I study the behavior of variables during the cycle by relating their growth rates to GDP growth rate. Hence, I regress the change in the logarithm of my variables of interest on GDP growth rate. Taking my empirical approach into account, $\text{RWA}^s$ becomes the natural measure of *Capital savings* as the following decomposition of the log of capital ratio shows:   
+
+
+\begin{equation}
+\begin{aligned}
+\label{eq:decomposition}
+\text{Log}\bigg(\frac{\text{Capital}}{\text{RWA}^f}\bigg) &= \text{Log Capital} -  \text{Log RWA}^f \\
+&= \text{Log Capital} -  \text{Log}\bigg(\frac{\text{RWA}^c}{\text{RWA}^s}\bigg) \\
+&= \text{Log Capital} -  \text{Log RWA}^c + \text{Log RWA}^s
+\end{aligned}
+\end{equation}
+
+If I regress all the change of these four variables - $\frac{\text{Capital}}{\text{RWA}^f}$, $\text{Capital}$, $\text{Log RWA}^c$, and $\text{Log RWA}^s$ - on GDP growth rate I obtain four estimates $\hat\beta_{\text{Cap. ratio}}$, $\hat\beta_{\text{Capital}}$, $\hat\beta_{\text{RWA}^c}$, and $\hat\beta_{\text{RWA}^s}$, respectively. Using the predicted values implied by these estimated in Equation \ref{eq:decomposition} we get the following  equality: $\hat\beta_{\text{Cap. ratio}} = \hat\beta_{\text{Capital}} -\hat\beta_{\text{RWA}^c} + \hat\beta_{\text{RWA}^s}$, which can be used to obtain the relative importance of changes of each of these three variables to changes of the capital ratio during the business cycle.   
+
+Note that I defined *Capital savings* such that positive values translate to lower actual capital requirements and consequently $\text{RW}^s \geq 0$, $\text{RWA}^{\$} \geq 0$, and $\text{RWA}^s \geq 1$. 
+
+Lastly, for robustness of the empirical analysis, I also calculate the Gini coefficient of the PD distribution as an alternative measure to my approach. 
 
 \subsection{Hypotheses on Capital Savings during the Business Cycle} \label{sec:hypotheses}
 
-Overall, capital requirements under the IRB approach are procyclical. During economic downturns credit risk increases which raises capital requirements forcing banks to either raise equity or cut down lending. Theory and empirical evidence suggest that banks opt for the latter as raising equity is also more expensive during recessions [@danielsson2001academic; @kashyap2004cyclical; @repullo2012procyclical; @behn2016procyclical].
+Overall, capital requirements under the IRB approach are procyclical. During economic downturns credit risk increases which raises capital requirements forcing banks to either raise equity or cut down lending. Theory and empirical evidence suggest that banks opt for the latter as raising equity is costly, even more so during recessions [@danielsson2001academic; @kashyap2004cyclical; @repullo2012procyclical; @behn2016procyclical].
 
-Between the two capital requirement components, the average component is a source of the procyclicality as long the relationship between the business cycle and PD is monotonic. Consider again the example shown in Figure \ref{fig:pdmap} with a portfolio containing a safe asset with PD equal to $PD_L$ and a risky asset with PD equal to $PD_H$ in proportions $q$ and $1-q$. In Appendix \ref{sec:appendixa}, I show that for $\text{PD} \in (0,0.25)$, $\text{RW}'>0$, $\text{RW}''<0$ and $\text{RW}'''>0$. I also show in \ref{sec:appendixa} that, on average, XX% of assets' PD lies within this range. For simplicity, I assume a constant $\text{LGD}_i=\text{LGD}$. So, the average component for this portfolio is: 
+Between the two capital requirement components, the average component is a source of the procyclicality as long the relationship between the business cycle and PD is negative and monotonic. Consider again the example shown in Figure \ref{fig:pdmap} with a portfolio containing a share $q$ of a safe asset with PD equal to $\text{PD}_L$ and a share $1-q$ of a risky asset with PD equal to $\text{PD}_H$ such that $\text{PD}_H>\text{PD}_L$. For practical reasons I restrict the analysis to the  $\text{PD} \in [0,0.25)$. Figure \ref{fig:densities} in Appendix \ref{sec:appendixa} shows that the percentage of PD within the $[0,0.25)$ interval is between 99.35% and 99.98%. Figure \ref{fig:derivatives} in Appendix \ref{sec:appendixa} shows that for $\text{PD} \in [0,0.25)$, $\frac{\partial\text{RW}}{\partial\text{PD}}>0$, $\frac{\partial^2\text{RW}}{\partial\text{PD}^2}<0$, and $\frac{\partial^3\text{RW}}{\partial\text{PD}^3}>0$. I assume, without loss of generality, a constant $\text{LGD}_i=\text{LGD}$ and constant $q$. Using the weighted average of this portfolio in equation \ref{eq:RW_counterfactual}, the average component for this portfolio is equal to the following: 
 
 \begin{equation}
 \label{eq:RW_counter_example}
-\text{RW}^{c}(q,\text{PD}_L, \text{PD}_H)=\text{RW}(q\text{PD}_L+(1-q)\text{PD}_H).
+\text{RW}^{c}(\text{PD}_L, \text{PD}_H)=\text{RW}(q\text{PD}_L+(1-q)\text{PD}_H).
 \end{equation}
 
-Because $\text{RW}'>0$ and as long PD estimates are affected monotonic and negatively by GDP growth, the average component of capital requirements increases during economic downturns. 
+Because $\frac{\partial\text{RW}}{\partial\text{PD}}>0$ and as long PD estimates are affected monotonic and negatively by GDP growth, the average component of capital requirements increases during economic downturns.  
 
-The direction of *Capital savings* during the business cycle is not trivial even when assuming a monotonic relationship between PD estimates and the business cycle. To explain the ambiguity, I consider three cases. But first, note that using the example in Figure \ref{fig:pdmap}, *Capital savings* can be written as the following:
+Conversely, the direction of *Capital savings* during the business cycle is not trivial even when assuming a monotonic relationship between PD estimates and the business cycle.  The ambiguity arises because *Capital savings* can only increase during a recession, and therefore be countercyclical, if the shape of the PD distribution is affected during the business cycle. If the PD estimates are equally affected during the business cycle, then there is only a shift of the location parameter of the PD distribution. Because the PD elasticity of capital requirements is lower for higher PD estimates, in this scenario *Capital savings* are procyclical. On the other hand, if riskier assets are sufficiently more sensitive to credit shocks than safer assets, then *Capital savings* are countercyclical. To illustrate the ambiguity, I consider three cases. 
+
+First, note that using the example in Figure \ref{fig:pdmap}, *Capital savings* can be written as the following:
 
 \begin{equation}
 \label{eq:RW_savings_example}
-\text{RW}^{s}(q,\text{PD}_L, \text{PD}_H)=\text{RW}(q\text{PD}_L+(1-q)\text{PD}_H)-q\text{RW}(\text{PD}_L)+(1-q)\text{RW}(\text{PD}_H).
+\text{RW}^{s}(\text{PD}_L, \text{PD}_H)=\text{RW}(q\text{PD}_L+(1-q)\text{PD}_H)-q\text{RW}(\text{PD}_L)+(1-q)\text{RW}(\text{PD}_H).
 \end{equation}
 
-We can find the effect of changes in the PD distribution to *Capital savings* by taking the total derivative of \ref{eq:RW_savings}:
+We can find the effect of changes in the PD distribution to *Capital savings* by taking the total derivative of \ref{eq:RW_savings_example}:
 
 \begin{equation}
 \label{eq:RW_savings_diff}
 \begin{aligned}
-d\text{RW}^{s}(q,\text{PD}_L, \text{PD}_H)
+d\text{RW}^{s}(\text{PD}_L, \text{PD}_H)
 &=\bigg[q\text{RW}'(q\text{PD}_L+(1-q)\text{PD}_H)-q\text{RW}'(\text{PD}_L)\bigg]d\text{PD}_L\\
 &+\bigg[(1-q)\text{RW}'(q\text{PD}_L+(1-q)\text{PD}_H)-(1-q)\text{RW}'(\text{PD}_H)\bigg]d\text{PD}_H\\
-&+\bigg[\text{RW}(\text{PD}_H)-\text{RW}(\text{PD}_L)-(\text{PD}_H-\text{PD}_L)\text{RW}'(q\text{PD}_L+(1-q)\text{PD}_H)\bigg]dq\\
 \end{aligned}
 \end{equation}
 
-Next, consider the case that all assets are affected equally during the business cycles in term of PD, i.e.,  $d\text{PD}_H=d\text{PD}_L=d\text{PD}$. Also, consider for now no portfolio reallocation, i.e., $dq=0$. In this scenario equation \ref{eq:RW_savings_diff} becomes:
+Next, consider the case that all assets are affected equally during the business cycles in term of PD, i.e.,  $d\text{PD}_H=d\text{PD}_L=d\text{PD}$. In this scenario equation \ref{eq:RW_savings_diff} becomes:
 
 \begin{equation}
 \label{eq:first_case}
@@ -206,9 +249,9 @@ d\text{RW}^{s}
 \end{aligned}
 \end{equation}
 
-Because $\text{RW}'$ is a convex function and Jensen's inequality, if $\text{dPD}_H=\text{dPD}_H=\text{dPD}$ then $\text{dRW}^{s}/\text{dPD}<0$. In this case, *Capital savings* are procyclical, decreasing when PD estimates increase, i.e., during economic downturns. Figure \ref{fig:pdmapcasesymm} shows graphically this first case.
+Because $\frac{\partial^2\text{RW}}{\partial\text{PD}^2}$ is a convex function and Jensen's inequality, if $d\text{PD}_H=d\text{PD}_H=d\text{PD}$ then $d\text{RW}^{s}/d\text{PD}<0$. In this case, *Capital savings* are procyclical, decreasing during economic downturns. Figure \ref{fig:pdmapcasesymm} shows graphically this first case.
 
-Next, consider the case riskier assets are more affected during the business cycles in term of PD, i.e.,  $\text{dPD}_H>\text{dPD}_L$.For simplicity consider the extreme case of $\text{dPD}_H=\text{dPD}$ and $\text{dPD}_L=0$. In this scenario equation \ref{eq:RW_savings_diff} becomes: 
+Next, consider the case that riskier assets are more affected during the business cycles in term of PD, i.e.,  $\text{dPD}_H>\text{dPD}_L$. For simplicity, consider the extreme case of $\text{dPD}_H=\text{dPD}$ and $\text{dPD}_L=0$. In this scenario, equation \ref{eq:RW_savings_diff} becomes: 
 
 \begin{equation}
 \label{eq:second_case}
@@ -218,128 +261,101 @@ Next, consider the case riskier assets are more affected during the business cyc
 \end{aligned}
 \end{equation}
 
-Because $\text{RW}''<0$ and $\text{PD}_H>q\text{PD}_L+(1-q)\text{PD}_H$, if $\text{dPD}_H=\text{dPD}$ and $\text{dPD}$ then $\text{dRW}^{s}/\text{dPD}>0$. In this case, *Capital savings* are countercyclical, increasing when PD estimates increase. In other words, the marginal capital requirement decreases during economic downturns. Figure \ref{fig:pdmapcaseassym} shows graphically this second case.
+Because $\frac{\partial^2\text{RW}}{\partial\text{PD}^2}<0$ and $\text{PD}_H>q\text{PD}_L+(1-q)\text{PD}_H$ $\text{dRW}^{s}/\text{dPD}>0$. In this case, *Capital savings* are countercyclical, increasing when PD estimates increase. In other words, the marginal capital requirement decreases during economic downturns. Figure \ref{fig:pdmapcaseassym} shows the second case graphically.
 
-Finally, consider the case where $\text{dPD}_H=\text{dPD}$, $\text{dRW}^{s}=0$ and $\text{d}q=0$. Using equation \ref{eq:RW_savings_diff}, we can find $\text{dPD}_L$ satisfying these conditions:
+Finally, consider the case where $\text{dPD}_H=\text{dPD}$ and $\text{dRW}^{s}=0$. Using equation \ref{eq:RW_savings_diff}, we can find $\text{dPD}_L$ satisfying these conditions:
 
 \begin{equation}
 \label{eq:third_case}
 \begin{aligned}
-\text{dPD}_{L}
-&=\text{dPD}\frac{(1-q)}{q}\frac{\bigg[\text{RW}'(\text{PD}_H)-\text{RW}'(q\text{PD}_L+(1-q)\text{PD}_H)\bigg]}{\bigg[\text{RW}'(q\text{PD}_L+(1-q)\text{PD}_H)-\text{RW}'(\text{PD}_L)\bigg]}\\
+d\text{PD}_{L}
+&=d\text{PD}\frac{(1-q)}{q}\frac{\bigg[\text{RW}'(\text{PD}_H)-\text{RW}'(q\text{PD}_L+(1-q)\text{PD}_H)\bigg]}{\bigg[\text{RW}'(q\text{PD}_L+(1-q)\text{PD}_H)-\text{RW}'(\text{PD}_L)\bigg]}\\
 \end{aligned}
 \end{equation}
 
-Because $\text{RW}'<0$ and $\text{PD}_H>q\text{PD}_L+(1-q)\text{PD}_H>\text{PD}_L$, both denominator and numerator of equation \ref{eq:third_case} are negative and consequently, $\text{dPD}_L>0$. From the first case we also know that $\text{dPD}_L<\text{dPD}$. Hence, the difference between the impact of the business cycle on riskier and safer assets have to be sufficiently large such that *Capital savings* are countercyclical.  
+Because $\frac{\partial\text{RW}}{\partial\text{PD}}<0$ and $\text{PD}_H>q\text{PD}_L+(1-q)\text{PD}_H>\text{PD}_L$, both denominator and numerator of equation \ref{eq:third_case} are negative and consequently, $\text{dPD}_L>0$. We also know from the first case that $\text{dPD}_L<\text{dPD}$, otherwise $\text{dRW}^{s}$ would be negative. Hence, the difference between the impact of the business cycle on riskier and safer assets have to be sufficiently large such that *Capital savings* are countercyclical. If that is not the case, then the procyclical effect on *Capital savings* shown in equation \ref{eq:first_case} dominates. 
 
-Whether *Capital savings* are pro- or countercyclical is an empirical question, as the direction of the cyclicality depends on how the economic cycle affects the shape of the PD distribution.
+Whether *Capital savings* are pro- or countercyclical is an empirical question, as the direction of the cyclicality depends on how the shape of the PD distribution changes during the business cycle.
 
 \section{Data and Capital Savings Measures} \label{sec:data}
 
-The main measure of *Capital savings* used in this paper is the ratio of equation \ref{eq:RW_counterfactual} to equation \ref{eq:RW_factual} as follows:
+To calculate the proposed measures of capital savings, one needs information on the distribution of banks’ regulatory risk parameters. However, data at such granularity is not available in the common balance sheet datasets. Although very detailed, datasets from credit registers are restricted to one country, and may still lack the relevant information. Therefore, to overcome data limitations, I collect information on the distribution of credit risk parameters (PD, EAD and LGD) from banks' individual Pillar-3 reports. The sample consists of 59 large banking groups, from 15 countries, that have adopted the IRB approach. For each bank, I collected consolidated information from the year the IRB approach was approved until 2018. The dataset distinguishes between wholesale, retail and equity portfolios and, in most cases, between their sub-categories (for instance, corporate, sovereign, and banks for wholesale, and real estate, qualifying revolving credit, and others for retail). This level of portfolio breakdown is important because regulatory formulas vary across categories, and consequently, more precise knowledge of portfolio composition reduces measurements errors. 
 
-\begin{equation}
-\label{eq:measure1}
-\text{RWA}^s=\frac{\text{RWA}^c}{\text{RWA}}.
-\end{equation}
+Figure \ref{fig:savingsbank} shows *Capital savings* calculated according to equation \ref{eq:measure1} i.e., the ratio of the average component of RWAs to actual RWAs. Each point is a bank-year observations and the bars indicates the average value across time for each bank. There is substantial variation across banks with Goldman Sachs saving the highest at an average rate of 220% and Mediobanca the lowest at an average rate of 118%. Variation across time is considerable with, for instance, *Capital savings* for Deutsche Bank going from 209% in 2010 to 161% in 2014. *Capital savings* also vary between and within countries. Figure \ref{fig:savingscountry}  aggregates the dataset by country. In the figure, each point is the average *Capital savings* for a bank and the bars are the average of across banks within a country. Variation between countries reaches its maximum at 50% (Denmark versus Norway) and within at 75% (between BNY Mellon and Goldman Sachs in the United States). 
 
-$\text{RW}^r$ is the rate at which a bank saves capital. For instance, a value of 1.5 means this portfolio would require 50% more capital in the absence of *Capital savings* to keep the same capital ratio. A value of one means that there are no *Capital savings* and implies a portfolio with a degenerate PD distribution. Any PD distribution with positive variance results in positive *Capital savings*.   
+Figure \ref{fig:savingsportfoliobank} shows *Capital savings* for wholesale and retail portfolios using the ranking of Figure \ref{fig:savingsbank}. The Figure suggests that *Capital savings* from wholesale portfolios are positively correlated to total *Capital savings*. This correlation seems not to be true for retail portfolios.
 
-An alternative way to measure *Capital savings* is in monetary units as follows:  
-
-\begin{equation}
-\label{eq:measure2}
-\text{RWA}^{\$}=\text{RWA}^c-\text{RWA}.
-\end{equation}
-
-Because this is a measure in US Dollars, it is affected by the size of the IRB portfolio. Therefore, differently from the main analysis, *Capital savings* are mechanically larger for larger banks and they increase as the portfolio rolls out to the IRB approach. 
-
-In the analysis I also consider the measure used in section \ref{sec:hypotheses} ($\text{RW}^s$), which is equivalent to dividing equation \ref{eq:measure2} by total EAD and therefore it is another measure of the intensity of *Capital savings*. Lastly, I calculate the Gini coefficient of the PD distribution as a robustness measure to my approach. According to the analysis shown in section \ref{sec:hypotheses} PD distributions with larger Gini coefficients should also generate larger *Capital savings*.   
-
-To calculate the proposed measures of capital savings, one needs information on the distribution of banks’ regulatory risk parameters. However, data at such granularity is not available in the common balance sheet datasets. Although very detailed, datasets from credit registers are restricted to one country, and may still lack the relevant information. Therefore, to overcome data limitations I collected information on the distribution of credit risk parameters (PD, EAD and LGD) from banks' individual Pillar-3 reports. The sample consists of 50 large banking groups, from 12 countries, that have adopted the IRB approach. For each bank, I collected consolidated information from the year the IRB approach was approved until 2018. The dataset distinguishes between wholesale, retail and equity portfolios and, in most cases, between their sub-categories (for instance, corporate and sovereign for wholesale, and real estate and qualifying revolving credit for retail). This level of portfolio breakdown is important because regulatory formulas vary across categories, and consequently, more precise knowledge of portfolio composition reduces measurements errors. 
-
-Figure \ref{fig:savingsbank} shows that the *Capital savings* calculated with the compiled dataset using the main measure \ref{eq:measure1} (minus one to improve readability). Each point is a bank-year observations and the bars indicates the average value across time for each bank. There is substantial variation across banks with Goldman Sachs saving the highest at an average rate of 120% and Mediobanca the lowest at an average rate of 18.4%. Variation across time is considerable with, for instance, *Capital savings ratio* for Deutsche Bank going from 108.7% in 2010 to 61.4% in 2014. *Capital savings* also varies between and within countries. Figure \ref{fig:savingscountry}  aggregates the dataset by country. In the figure, each point is a bank observation and the bars are the average of these points. Variation between countries reaches its maximum at 50% (Denmark versus Norway) and within at 75% (between BNY Mellon and Goldman Sachs in the United States).
-
-Besides the business cycle, I also test if bank-specific characteristics are associated to *Capital savings*. Several works relate bank-specific characteristics to either total RWA or average RW [@vallascas2013risk; @mariathasan2014manipulation; @ferribank; @gropp2018banks]. Table \ref{tab:summary} shows summary statistics for the all the dependent variables, the main variable of interest (GDP growth rate), and all the other variables used in the analysis. 
-
-The first set of variables captures banks’ opportunities and incentives to affect RWA by means of capital arbitrage. First, I control for bank size using the log of total assets (in millions of US dollars). The expectation regarding the impact of bank size is ambiguous. On the one hand, larger banks might be able to adopt more sophisticated internal risk models and better exploit modelling choices to increase capital savings. On the other hand, larger banks might be subject to closer regulatory scrutiny and, as a result, may find it more difficult to manipulate their risk estimates. I also include the regulatory capital ratio as control. Better capitalized banks could be subject to less regulatory scrutiny [@calem1999impact] and, consequently, in a better position to engage in regulatory arbitrage. However, the incentives to manipulate risk parameters should be lower for banks with high capital ratios as they are at a greater distance to the minimum requirement. Thus, the expected effect of capital ratio on capital savings is also ambiguous. Next, I add banks' profitability using return on asset (ROA) and return on equity (ROE) with both measured before taxes. Profitable banks face fewer incentives to understate the riskiness of their assets and to engage in regulatory arbitrage more generally. Finally, I study the relationship of *Capital savings* to risk-taking. I add the ratio of non-performing loans to total loans to test this proposition.
-
+Lastly, Figure \ref{fig:averagebank} plots, in terms of risk-weights, *Capital savings*, the average component, and total risk-weights, following equations \ref{eq:RW_savings}, \ref{eq:RW_counterfactual}, and \ref{eq:RW_factual}, respectively. Banks are ranked by total risk-weight. From equation \ref{eq:RW_savings}, the third column is obtained by subtracting the first column from the second, i.e., total risk-weights are equal to the average component minus *Capital savings*. As expected, the average component is larger than the *Capital savings* generated by the shape component. Still, because of *Capital savings*, the variation and level of total risk-weights are substantially lower than implied by the average component. Total risk-weights are 17 percentage points, on average, lower than the average component and their standard deviation is 6 percentage points lower.     
 \section{Capital Savings and the Business Cycle} \label{sec:cycle}
 
-In this section I investigate the relationship between *Capital savings* and the business cycle. I start by explaining the theoretical ambiguous relationship between *Capital savings* and the business cycle. Next I show that *Capital savings* are countercyclical, i.e., given an average portfolio PD, banks need more capital in good times than in bad times to reach the same capital ratio. Finally, I provide evidence that this relationship is not purely mechanical but depends on how banks reallocate their assets through the business cycle.        
+In this section I investigate the relationship between *Capital savings* and the business cycle. I show that *Capital savings* are countercyclical, i.e., for the same average PD, capital requirements are high when the economic is booming and low during recessions.      
 
-Throughout this section, I report results from estimating the following specification: 
+Throughout this section, I report the results from estimating the following specification: 
 
 \begin{equation*}
 \Delta \text{Y}_{i,t}^{j} = \beta \Delta\text{Log GDP}_{i,t}+\alpha_{i}+\alpha_{t}+\varepsilon_{i,t}. \end{equation*}
 
-The dependent variable is the yearly change in a variable associated to portfolio $j$ for bank $i$ at year $t$. The change in the logarithm of real GDP per capita used comes from the country where the bank has its headquarter. All regressions include bank and year fixed effects and robust standard errors adjusted for clustering at the country level are reported in parentheses.        
+The dependent variable is the yearly change in a variable associated to portfolio $j$ for bank $i$ at year $t$. The change in the logarithm of real GDP per capita comes from the country where the bank has its headquarter. All regressions include bank and year fixed effects and standard errors are clustered at the country-level.  
 
-Column 1 Table \ref{tab:main} shows results using equation \ref{eq:measure1}, my preferred measure of *Capital savings*.  shows that total *Capital savings* are countercyclical. According to regression 1 an increase of 1.6 percentage points in GDP growth rate (one standard deviation) decreases total *Capital savings* growth rate by 0.7 percentage points on average. The effect is economically sizable representing 14% of total *Capital savings* standard deviation in the sample. 
+Table \ref{tab:main} shows the results using equation \ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs, as measure of *Capital savings*. According to regression 1, an increase of 1.7 percentage points in GDP growth rate (one standard deviation) decreases total *Capital savings* growth rate by 0.8 percentage points on average. The effect is economically sizable representing 17% of total *Capital savings* standard deviation in the sample. 
 
-The remaining columns of Table \ref{tab:main} suggest that the countercyclical relationship between GDP and *Capital savings* is mostly driven by wholesale portfolios, especially corporate portfolios. The estimated coefficient in Column 2 is negative suggesting that *Capital savings* generated by retail portfolios are also countercyclical. However, this coefficient is not statistically significant. On the other hand, the coefficient of GDP growth rate on *Capital savings* from wholesale portfolios is statistically and economically significant. According to regression 3 one standard deviation increase in GDP growth rate decreases *Capital savings* from wholesale portfolios growth rate by 0.8 percentage points on average, which is 16% of the *Capital savings* from wholesale portfolios standard deviation. Columns 3 to 6 indicate that within the wholesale portfolio most of the countercyclical variation appears to come from corporate portfolios. Only in regression 4 the coefficient of GDP growth rate is negative and statistically significant.  
+The remaining columns of Table \ref{tab:main} suggest that the countercyclical relationship between GDP and *Capital savings* is mostly driven by wholesale portfolios, especially corporate portfolios. The negative estimated coefficient in Column 2 suggests that *Capital savings* generated by retail portfolios are also countercyclical. However, this coefficient is not statistically significant. On the other hand, the coefficient of GDP growth rate on *Capital savings* from wholesale portfolios is statistically and economically significant. According to regression 3, one standard deviation increase in GDP growth rate decreases the growth rate of *Capital savings* from wholesale portfolios by 0.9 percentage points on average. The effect is 19% of the dependent variable's standard deviation. Columns 3 to 6 indicate that within the wholesale portfolio most of the countercyclical variation appears to come from corporate portfolios. Only in regression 4 the coefficient of GDP growth rate is both negative and statistically significant.  
 
-To shed light on the importance of *Capital savings*, I regress all the components of capital ratio on GDP growth rate. The capital ratio decomposition is shown in equation \ref{eq:decomposition}. The contribution of each component to the cyclicality of the capital ratio is the ratio of their estimated coefficient to the coefficient for the capital ratio regression. To guarantee that the sum of all effects add up to 100\%, I use in this analysis the non-winsorized data and restrict the sample to banks which I observe their capital ratio. Although the coefficient for *Capital savings* are no longer statistically significant, Table \ref{tab:contribution} shows that *Capital savings* are the only countercyclical component of capital ratios. The economic magnitude is also meaningful: *Capital savings* reduce the procyclicality of capital ratios by 23.7\%.    
+Next, I evaluate the impact of *Capital savings* on the capital ratio during the business cycle. I regress the yearly change of each capital ratio component on GDP growth rate. As explained in Section \ref{sec:PD_capital_savings}, the effect of GDP growth rate on each component sum up to the effect on the capital ratio. Consequently, the contribution of each component to the cyclicality of the capital ratio is the ratio of their estimated coefficient to the coefficient for the capital ratio regression. 
 
-\begin{equation}
-\begin{aligned}
-\label{eq:decomposition}
-\Delta \text{Log Cap. Ratio}_{i,t} &= \Delta \text{Log Capital}_{i,t} - \Delta \text{Log RWA}_{i,t} \\
-&= \Delta \text{Log Capital}_{i,t} - \Delta \text{Log RWA}^c_{i,t} + \Delta \text{Log RWA}^r_{i,t} 
-\end{aligned}
-\end{equation}
+Table \ref{tab:contribution} shows that the growth rate of *Capital savings* is the only countercyclical component of capital ratio growth rate. As expected, both the amount of capital and RWAs are procyclical which translate to capital ratios also being procyclical. The results also confirm the expectation that the procyclical effect of the average component dominates over the countercyclical *Capital savings*. Nevertheless, the contribution of *Capital savings* is economically relevant, reducing the procyclicality of capital ratios by 23.7\% on average.[^3] 
+
+[^3]: The coefficient on total *Capital savings* differs slightly from Table \ref{tab:main} because in Table \ref{tab:contribution} the sample is restrict to banks with observable capital ratio and is winsorized at 1% instead of 5%. The process of winsorizing is also the reason why the contributions do not add-up to 100%. 
 
 \subsection{Robustness to Alternative Measures and Samples} \label{sec:robustness}
 
-In this section, I test the robustness of the main results to alternative measures of *Capital savings*. In Panel A of Table \ref{tab:alt}, the dependent variable measures *Capital savings* in US dollars following equation \ref{eq:measure2}. As before, the estimated coefficients suggest that the countercyclical effect is mostly driven by wholesale portfolios. Differently from Table \ref{tab:main}, the coefficient of GDP growth rate estimated on the bank portfolio is now negative and statistically significant. Because coefficients in Panel A of Table \ref{tab:alt} are  impacted by the size of the portfolio, while in \ref{tab:main} they are not, the results of regressions 6 in both tables suggest that part of the *Capital savings* countercyclicality comes from an increase in exposure to other banks during recessions.          
+In this section, I test the robustness of the main results to alternative measures of *Capital savings*. In Panel A of Table \ref{tab:alt}, the dependent variable measures the amount *Capital savings* in US dollars following equation \ref{eq:measure2}. As before, the estimated coefficients suggest that the countercyclical effect is mostly driven by wholesale portfolios. Differently from Table \ref{tab:main}, the coefficient of GDP growth rate estimated on the bank portfolio is now negative and statistically significant. Because coefficients in Panel A of Table \ref{tab:alt} are  impacted by the size of the portfolio, while in \ref{tab:main} they are not, the results of regressions 6 in both tables suggest that part of the *Capital savings* countercyclicality comes from an increase in exposure to other banks during recessions.          
 
-In panel B of Table \ref{tab:alt} the measure of *Capital savings* in US dollars is rescaled by the amount of EAD in the respective portfolio following equation \ref{eq:RW_savings}. This measure, therefore, defines *Capital savings* in terms of the usual metric of capital requirements intensity, risk-weights. Although the coefficient on the wholesale portfolio is no longer statistically significant, total *Capital savings* and those coming from corporate portfolios are still statistically different from zero at the 1%  confidence level. The attenuation of the effect on wholesale portfolio appears to come from large, albeit not significant, procyclical *Capital savings* in sovereign portfolios. Moreover, the small and statistically insignificant coefficient in regression 6 reinforces the claim that countercyclical *Capital savings* in the bank portfolio are due to the extensive and not the intensive margin.
+In panel B of Table \ref{tab:alt} the measure of *Capital savings* in US dollars is rescaled by the amount of EAD in the respective portfolio following equation \ref{eq:RW_savings}. This measure, therefore, defines *Capital savings* in terms of the usual metric of capital requirements intensity — i.e., risk-weights. Although the coefficient on the wholesale portfolio is no longer statistically significant, total *Capital savings* and those coming from corporate portfolios are still statistically different from zero at the 1% confidence level. The attenuation of the effect on wholesale portfolio appears to come from large, albeit not statistically significant, procyclical *Capital savings* in sovereign portfolios. Moreover, the small and statistically insignificant coefficient in regression 6 reinforces the claim that countercyclical *Capital savings* in the bank portfolio are mostly due to the extensive and not the intensive margin.
 
-Lastly, in Panel C of Table \ref{tab:alt} I use the Gini coefficient as an alternative measure of the shape component of the PD distribution. Again, the results shown in Panel C support the evidence from Table \ref{tab:alt}: *Capital savings* are countercyclical and mostly driven by the effect of GDP growth rate on *Capital savings* from corporate portfolios.   
+In Panel C of Table \ref{tab:alt} I use the Gini coefficient as an alternative measure of the shape component of the PD distribution. Again, the results in Panel C support the evidence from Table \ref{tab:main} i.e., *Capital savings* are countercyclical and mostly driven by the effect of GDP growth rate on *Capital savings* from corporate portfolios.   
+
+Lastly, Appendix \ref{sec:appendixc} shows that the results are robust to the addition of bank- and country-level controls (Table \ref{tab:extension}), to including only banks with at least 10 observations (Panel A of Table \ref{tab:robustness}), and to winsorizing the sample to 1% level instead of 5% (Panel B of Table \ref{tab:robustness}).
 
 \section{Capital Savings and Portfolio Reallocation} \label{sec:reallocation}
 
-In this section I argue that portfolio reallocation during the business cycle explains part of the *Capital savings* cyclicality. As method, I use the observed movements on moments of the PD distribution during the business cycle that are not in line with the expected movements from a static portfolio as evidence in favor of a portfolio reallocation effect on *Capital savings*.[^2] 
+In this section I argue that portfolio reallocation during the business cycle explains part of the *Capital savings* cyclicality. As method, I study the changes of the PD distribution moments during the business cycle and check if these changes are consistent with a portfolio reallocation effect on *Capital savings*.[^4] 
 
-[^2]: Ideally, for this purpose, I would track individual assets during the cycle and compare their PD estimates evolution to the PD estimates of new loans. Unfortunately, in my dataset, I only observe assets aggregated by PD bands without knowledge if amount changes in a band are due to new loans or changes in credit quality of assets already held.
+[^4]: Ideally, for this purpose, I would track individual assets during the cycle and compare their PD estimates evolution to the PD estimates of new loans. Unfortunately, in my dataset, I only observe assets aggregated by PD bands without knowledge if amount changes in a band are due to new loans or changes in credit quality of assets already held.
 
-According to the theoretical framework presented in section 4.1, an increase in average PD reduces the amount of *Capital savings* if other moments are kept constant. This relationship is illustrated in Figure \ref{fig:pdmapcasesymm} and empirically tested in Table \ref{tab:moments_contribution}. In all columns of this table average PD is negatively associated with *Capital savings*. Note that, in Table \ref{tab:moments_contribution}, not only the explained but also explanatory variables change across regressions by portfolio $j$. 
+According to the theoretical framework presented in section \ref{sec:hypotheses}, an increase in average PD reduces the amount of *Capital savings* holding other moments constant. This relationship is illustrated in Figure \ref{fig:pdmapcasesymm} and empirically tested in Table \ref{tab:moments_contribution}. In all columns of this table average PD is negatively associated with *Capital savings*. Note that, in Table \ref{tab:moments_contribution}, not only the explained but also explanatory variables change across regressions by portfolio $j$. 
 
-Panel A in table \ref{tab:moments_cyclicality} reports how average PD moves during the business cycle. As expected, in most of the regressions, changes in average PD are negatively associated with GDP growth. This association is the known driver of the procyclical character of the current model-based capital regulation and its interpretation is fairly mechanical. During recessions average credit quality deteriorates, or in other words, average PD increases. The only exception to the rule is the sovereign portfolio. Column 5 of panel A shows that the coefficient of GDP growth rate on changes in the average PD of sovereign portfolios is positive, although without strong evidence that it is not different from zero. One possible reason for this result is that, during economic downturns, banks may search for safe assets mostly in the form of safe haven government bonds. According to column 5 of panel A, this reallocation of portfolio appears to be sufficient to compensate any deterioration of the prior held portfolio. Together with column 5 of Table \ref{tab:moments_contribution}, it also helps explain the positive (and insignificant) results in column 5 of Tables \ref{tab:main} and \ref{tab:alt}. 
+Panel A in Table \ref{tab:moments_cyclicality} reports how average PD moves during the business cycle. As expected, in most of the regressions, changes in average PD are negatively associated with GDP growth. This association is the driver of the procyclical character of the current model-based capital regulation. The only exception is the sovereign portfolio. Column 5 of Panel A shows that the coefficient of GDP growth rate on changes in the average PD of sovereign portfolios is positive, although not statistically different from zero. A possible explanation for the positive and insignificant result is that during economic downturns banks may search for safe assets mostly in the form of safe haven government bonds. According to column 5 of Panel A, this reallocation of portfolio appears to be sufficient to compensate any deterioration of the prior held portfolio. Together with column 5 in Table \ref{tab:moments_contribution}, Column 5 of Panel A in Table \ref{tab:moments_cyclicality} also helps explain the positive and insignificant results in column 5 of Tables \ref{tab:main} and \ref{tab:alt}. 
 
-Table \ref{tab:moments_contribution} also shows that, in line with the theoretical framework, an increase in PD variance is positively associated with *Capital savings* for all portfolios. And in line with the evidence from Tables \ref{tab:main} and \ref{tab:alt}, panel B in Table \ref{tab:moments_cyclicality} shows that the effect of the business cycle on the PD variance is concentrated on corporate portfolios. In sum, the estimated coefficients of the average PD and the PD variance in Table \ref{tab:moments_contribution} and panels A and B in Table \ref{tab:moments_cyclicality} provide strong empirical support to the theoretical framework presented in section 4.1.
+Table \ref{tab:moments_contribution} also shows that, in line with the theoretical framework, an increase in PD variance is positively associated with *Capital savings* for all portfolios. And in line with the evidence from Tables \ref{tab:main} and \ref{tab:alt}, Panel B in Table \ref{tab:moments_cyclicality} shows that the effect of the business cycle on the PD variance is concentrated on corporate portfolios. In sum, the estimated coefficients of the average PD and the PD variance in Table \ref{tab:moments_contribution} and Panels A and B in Table \ref{tab:moments_cyclicality} provide strong empirical support to the theoretical framework presented in section \ref{sec:hypotheses}.
 
-At the same time, however, using only the evidence provided by the average and variance of the PD distribution, the hypothesis that portfolio reallocation does not impact *Capital savings* cannot be refuted, exactly because the estimated effect of these two moments on *Capital savings* are strongly aligned with the theoretical framework which portfolio reallocation is not present. Consider now a negative shock to a continuous PD distribution, such that we can measure its skewness and kurtosis. It is trivial that the equivalent case with a continuous PD distribution to the scenario in Figure \ref{fig:pdmapcasesymm} wouldn't affect either of these moments. On the other hand, in the second scenario the PD distribution should become more skewed to the right. Even if we think that some assets will become safer during bad times, it is reasonable to expect a larger effect on the right tail than on the left tail of the PD distribution. Consequently, without portfolio reallocation, we should expect the skewness of the PD distribution to be negatively associated with the GDP growth rate.  
+At the same time, however, using only the evidence provided by the average and variance of the PD distribution, the hypothesis that portfolio reallocation does not impact *Capital savings* cannot be refuted exactly because the estimated effect of these two moments on *Capital savings* are strongly aligned with the theoretical framework, which does not allow for portfolio reallocation. Consider now a negative shock to a continuous PD distribution, such that we can measure its skewness. It is trivial that the equivalent case with a continuous PD distribution to the scenario in Figure \ref{fig:pdmapcasesymm} would not affect the skewness of the distribution. Still in this case, only a change in the location parameter occurs. On the other hand, in the second scenario the PD distribution should become more skewed to the right. Even if we think that some assets will become safer during bad times, it is reasonable to expect a larger effect on the right tail than on the left tail of the PD distribution. Consequently, without portfolio reallocation, we should expect the skewness of the PD distribution to be negatively associated with the GDP growth rate.  
 
-Panel C in Table \ref{tab:moments_cyclicality} provides evidence that the observed relationship between PD distribution skewness and the business cycle cannot be explained without portfolio reallocation. All the statistical significant coefficients are positive, contrary to the expectation if banks wouldn't reallocate their portfolio. Considering an economic downturn, the positive coefficients suggest that banks fight the deterioration of their portfolio credit quality by reducing risk taking in new loans. The combination of these two movements, higher PD of existing exposure and lower PD of new assets, results in a less skewed PD distribution during recessions. 
+Panel C in Table \ref{tab:moments_cyclicality} provides evidence that the observed relationship between PD distribution skewness and the business cycle is consistent with portfolio reallocation. All the statistical significant coefficients are positive, contrary to the expectation if banks would not reallocate their portfolio. The positive coefficients suggest that banks respond to the deterioration of their portfolios' credit quality by reducing risk taking in new loans. The combination of these two movements, higher PD of existing exposures and lower PD of new assets, results in a less skewed PD distribution during recessions. 
 
-Table \ref{tab:moments_contribution} shows that lower skewness translates into higher *Capital savings*. The effect is statistical significant for all except sovereign portfolios. According to column 1, an increase of 0.182 percentage points in PD distribution skewness growth rate (one standard deviation) decreases total *Capital savings* growth rate by 0.009 percentage points on average, representing 20% of total *Capital savings* standard deviation. The effect is even stronger on corporate portfolios accounting for 40% of their *Capital savings* standard deviation. 
-The evidence of Panel C in Table \ref{tab:moments_cyclicality} and Table \ref{tab:moments_contribution} suggest that as banks flight to safety in economic recessions, the increase in *Capital savings* due to the associated less skewed PD distribution helps banks to maintain their capital ratios. This countercyclical effect driven by the skewness of the PD distribution is on top of any gain from a lower average PD. 
+Table \ref{tab:moments_contribution} shows that lower skewness translates into higher *Capital savings*. The effect is statistical significant for all except sovereign portfolios. According to column 1, an increase of 18.2 percentage points in PD distribution skewness growth rate (one standard deviation) decreases total *Capital savings* growth rate by 0.9 percentage points on average, representing 20% of total *Capital savings* standard deviation. The effect is even stronger on corporate portfolios accounting for 41% of their *Capital savings* standard deviation. 
+
+The evidence of Panel C in Table \ref{tab:moments_cyclicality} and Table \ref{tab:moments_contribution} suggest that part of the increase in *Capital savings* in economic recessions is consistent with a portfolio reallocation effect. This countercyclical effect, driven by the skewness of the PD distribution, is on top of any gain from a lower average PD also a result of the reduced risk taking. 
 
 \subsection{Selection and Reallocation Across Portfolios} \label{sec:cross_reallocation}
 
-\section{Additional Results} \label{sec:additional_results}
+In this section, I show that selection into IRB is not driving my results. Although banks cannot opt out of IRB approach once it has been approved, they can try to (re)allocate assets to portfolios under the less risk-sensitive standardized approach. Consequently, the countercyclical effect of *Capital savings* can potentially be confounded with this across approach reallocation.  
 
+Table \ref{tab:other} provides little support for cross approach reallocation during the business cycle. The growth rate of the total amount (column 1), the average risk-weight (column 2), and the share under the standardized approach (column 3) are all positively associated with GDP growth rate but none of the coefficients are statistically significant. The positive coefficient in column 3 is also not in line with the expectation that banks would move assets to the standardized approach during economic downturns. The positive coefficient in column 1 is most likely driven by the balance sheet expansion during economics booms while the positive coefficient in column 2 is reflecting portfolio reallocation within the standardized approach during the business cycle, for instance, from sovereign to corporate lending.
 
-Besides the business cycle, I also test if bank-specific characteristics are associated to *Capital savings*. Several works relate bank-specific characteristics to either total RWA or average RW [@vallascas2013risk; @mariathasan2014manipulation; @ferribank; @gropp2018banks ]. In this section, I use these prior evidence to develop my expectations on how each of these variables may affect capital savings. 
+Lastly, I test if banks reallocate across portfolios under the IRB approach during the business cycle. According to columns 4 and 5 in Table \ref{tab:other}, it seems that banks increase retail exposure at the expense of wholesale exposure during periods of economic expansion. However, I find this reallocation to be statistically insignificant. 
 
-Table \ref{tab:summary} shows summary statistics for the all the dependent variables, the main variable of interest (GDP growth rate), and all the other variables used in the analysis. 
-
-The first set of variables captures banks’ opportunities and incentives to affect RWA by means of capital arbitrage. First, I control for bank size using the log of total assets (in millions of US dollars). The expectation regarding the impact of bank size is ambiguous. On the one hand, larger banks might be able to adopt more sophisticated internal risk models and better exploit modelling choices to increase capital savings. On the other hand, larger banks might be subject to closer regulatory scrutiny and, as a result, may find it more difficult to manipulate their risk estimates. I also include the regulatory capital ratio as control. Better capitalized banks could be subject to less regulatory scrutiny [@calem1999impact] and, consequently, in a better position to engage in regulatory arbitrage. However, the incentives to manipulate risk parameters should be lower for banks with high capital ratios as they are at a greater distance to the minimum requirement. Thus, the expected effect of capital ratio on capital savings is also ambiguous. Next, I add bank profitability using net income over total assets. Profitable banks face fewer incentives to understate the riskiness of their assets and to engage in regulatory arbitrage more generally.
-
-The second set of variables captures differences in the regulatory treatment of bank activities on capital savings. For instance, I control for for differences in banks’ business models by including the ratios of customer loans to total assets and net interest income to operational revenue. Under Basel accords, the risk weights formulas are concave for lending activities, such as customer loans. As a result, I expect banks with higher shares of these variables to have more *Capital savings*.
-
-Finally, I study the relationship of *Capital savings* to risk-taking. The RW decomposition analysis suggests that riskier banks benefit more from *Capital savings*. I add the ratio of non-performing loans to total loans to test this proposition. I also include bank funding using the ratio of total deposits to total assets. Because deposits are a more stable and cheap form of funding, banks with a larger deposit base are, therefore, more likely to take risks. The effect of deposits funding on *Capital savings* depends on how risk-taking is manifested by the deposit funding. If banks increase their entire portfolio riskiness, i.e., if risk-taking is manifested simply as a shift in the PD distribution location parameter, then deposits to total assets are negatively correlated to *Capital savings*. Conversely, *Capital savings* increase if banks take risk by having fatter upper-tails in the PD distribution. 
+Overall, Table \ref{tab:other} supports ruling out selection concerns to the result that *Capital savings* are a countercyclical component of capital requirements.   
 
 \section{Conclusion and Discussion} \label{sec:conclusion}
 
-This paper contributes to understanding the cyclicality and variability of capital requirements by identifying the effects of an unexplored feature of the IRB framework on capital requirements. *Capital savings* due to the shape of PD distribution and the concavity of the IRB formulas are economically relevant. *Capital savings* are also countercyclical and reduce the procyclicality of RWA by 23.7%.
-Hence, the concavity of IRB formulas could be explored to reduce procyclicality of capital regulation.
+This paper contributes to understanding the cyclicality and variability of capital requirements by identifying the effects of an unexplored feature of the IRB framework on capital requirements. *Capital savings* due to the shape of PD distribution and the concavity of the IRB formulas are countercyclical and economically relevant. *Capital savings* reduce the procyclicality of the capital ratio by 23.7%. Overall, this paper provides evidence that the concavity of IRB formulas could be explored to reduce the procyclicality of current capital regulation.
 
 
 \section*{References} 
-
+\noindent
 <div id="refs"></div>
+
 
 \newpage 
 
@@ -376,7 +392,7 @@ aux.df <- data.frame(PD.l = PD.l, PD.h = PD.h, PD.a = PD.a, PD.l3 = PD.l3, PD.a2
 ```
 
 ```{r, results="hide"}
-pd_map_cap <-  "\\label{fig:pdmap}The figure plots the mapping from probabilities of default to capital requirementes per unit of exposure according to equation \\ref{eq:RW_function}. $LGD$ is set equal to one and the correlation coefficient to 0.15."
+pd_map_cap <-  "\\label{fig:pdmap}The figure plots the mapping from PD to risk-weights according to equation \\ref{eq:RW_function}. $LGD$ is set equal to one and the correlation coefficient to 0.15."
 
 ```
 
@@ -445,7 +461,7 @@ aux.df <- data.frame(PD.l = PD.l, PD.h = PD.h, PD.a = PD.a, PD.l3 = PD.l3, PD.a2
 
 
 ```{r}
-cyclicality_cap_symm = "\\label{fig:pdmapcasesymm}The Figure shows the case where capital savings are procyclical. The dotted lines correspond to the potfolio before the credit risk shock (dPD) and the dashed lines to the portfolio after the the shock. The segmentes in the plot show the size of the capital savings before the shock."
+cyclicality_cap_symm = "\\label{fig:pdmapcasesymm}The figure shows how changes in PD can lead to procyclical \\textit{Capital savings}. The dotted lines correspond to the portfolio before the credit risk shock and the dashed lines to the portfolio after the the shock. The arrow segments in the plot show the size of the capital savings before the shock."
 ```
 
 ```{r, cyclicalitysymm, fig.height = 3, fig.width = 4,results="hide", fig.align = 'center', echo=FALSE, message=FALSE, fig.cap= cyclicality_cap_symm}
@@ -487,7 +503,7 @@ cyclicality_cap_symm = "\\label{fig:pdmapcasesymm}The Figure shows the case wher
 coord_flex_cart(bottom = brackets_horizontal(length = unit(0.075, "npc")))
 ```
 ```{r}
-cyclicality_cap_asym = "\\label{fig:pdmapcaseassym}The Figure shows the case where capital savings are countercyclical. The dotted lines correspond to the potfolio before the credit risk shock (dPD) and the dashed lines to the portfolio after the the shock. The segmentes in the plot show the size of the capital savings before the shock. "
+cyclicality_cap_asym = "\\label{fig:pdmapcaseassym}The figure shows how changes in PD can lead to countercyclical \\textit{Capital savings}. The dotted lines correspond to the portfolio before the credit risk shock and the dashed lines to the portfolio after the the shock. The arrow segments in the plot show the size of the capital savings before the shock. "
 ```
 
 
@@ -529,10 +545,10 @@ ggplot(data = subset(data,subset = PD <0.2),
 ```
 
 ```{r}
-savings_cap = "\\label{fig:savingsbank}The figure plots the log of banks capital savings. This measure is calculated using equation \\ref{eq:measure1}. Each point in the plot is a bank-year observation and bars are the averages values for each bank."
+savings_cap = "\\label{fig:savingsbank}The figure plots \\textit{Capital savings} using equation \\ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs, as measure. Each point in the plot is a bank-year observation and bars are the averages across time for each bank."
 ```
 
-```{r, include = TRUE, fig.height = 6.5, fig.width = 5,results="hide",fig.cap= savings_cap, fig.align = 'center'}
+```{r, include = TRUE, fig.height = 7.5, fig.width = 5,results="hide",fig.cap= savings_cap, fig.align = 'center'}
 bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>% 
   select(name, Country, RWA.r.Total)%>%
   group_by(name, Country) %>%
@@ -545,44 +561,100 @@ bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>%
   #       name = fct_reorder(name, ordering),
   #       Country = fct_reorder(Country, ordering)) %>%
  ggplot(mapping = aes(x = reorder(name, RWA.r.Total, FUN = mean, na.rm=TRUE),
-                      y = RWA.r.Total-1)) +
+                      y = RWA.r.Total)) +
 geom_point(alpha = 0.5,size = 2) +
   stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
     labs(x=NULL) +
-    coord_flip() +
-  labs(y =  unname(TeX(c("$RWA^{s}-1" )))) +
+    coord_flip(ylim=c(1, 2.5)) +
+  labs(y =  unname(TeX(c("$RWA^{s}$" )))) +
   scale_fill_grey()+
     theme_bw()
 
 ```
 
 ```{r}
-savings_cap_country = "\\label{fig:savingscountry}The figure plots the banks capital savings ratio. This measure is calculated using equation \\ref{eq:measure1}. For each bank I used the average across time such that each point in the plot is a bank observation and bars are the averages values for each country."
+savings_cap_country = "\\label{fig:savingscountry}The figure plots \\textit{Capital savings} using equation \\ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs, as measure. Each point is the across time average \\textit{Capital savings} for a bank and the bars are the average across banks within a country."
 ```
 
 ```{r, include=TRUE, fig.height = 4, fig.width = 3,results="hide",fig.cap= savings_cap_country, fig.align = 'center'}
 bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid) %>% 
-  select(Country,name, year, RWA.r.Total)%>%
-  group_by(Country,name) %>%
+  select(country.name,name, year, RWA.r.Total)%>%
+  group_by(country.name,name) %>%
  summarise_if(is.numeric,mean,na.rm= TRUE)%>%
- ggplot(mapping = aes(x = reorder(Country, RWA.r.Total, FUN = mean, na.rm=TRUE),
-                          y = RWA.r.Total-1)) +
+ ggplot(mapping = aes(x = reorder(country.name, RWA.r.Total, FUN = mean, na.rm=TRUE),
+                          y = RWA.r.Total)) +
 geom_point(alpha = 0.5,size = 2) +
   stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
     labs(x=NULL) +
-  labs(y =  unname(TeX(c("$RWA^{s}-1" )))) +
-  coord_flip() +
+  labs(y =  unname(TeX(c("$RWA^{s}" )))) +
+  coord_flip(ylim=c(1, 2.5)) +
   theme_bw()
+
+```
+```{r}
+savings_portfolio_cap = "\\label{fig:savingsportfoliobank}The figure plots \\textit{Capital savings} using equation \\ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs, as measure. The left-hand side plots shows \\textit{Capital savings} for wholesale portfolios and the right-hand side for retail portfolios. Each point in the plot is a bank-year observation and bars are the averages across time for each bank."
+```
+
+```{r, include = TRUE, fig.height = 7.5, fig.width = 6,results="hide",fig.cap= savings_portfolio_cap, fig.align = 'center'}
+bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>% 
+  select(name, Country, RWA.r.Total, RWA.r.Retail, RWA.r.Wholesale)%>%
+  pivot_longer(cols = c("RWA.r.Retail","RWA.r.Wholesale"), names_to = "Portfolio", values_to = "RWA.r") %>%
+  mutate(Portfolio = factor(Portfolio, 
+                            levels = c("RWA.r.Wholesale","RWA.r.Retail"), 
+                            labels = c("Wholesale","Retail")))%>%
+ ggplot(mapping = aes(x = reorder(name, RWA.r.Total, FUN = mean, na.rm=TRUE),
+                      y = RWA.r)) +
+geom_point(alpha = 0.5,size = 2) +
+  stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
+    labs(x=NULL) +
+    coord_flip(ylim=c(1, 3.5)) +
+  labs(y =  unname(TeX(c("$RWA^{s}$" )))) +
+  scale_fill_grey()+
+    theme_bw() +
+  facet_wrap(~Portfolio)
 
 ```
 
 
 
+```{r}
+average_cap = "\\label{fig:averagebank}The figure plots, in terms of risk-weights, \\textit{Capital savings} ($\\text{RW}^s$), the average component ($\\text{RW}^c$), and total risk-weights ($\\text{RW}^f$), following equations \\ref{eq:RW_savings}, \\ref{eq:RW_counterfactual}, and \\ref{eq:RW_factual}, respectively. Each point in the plot is a bank-year observation and bars are the averages across time for each bank."
+```
+
+```{r, include = TRUE, fig.height = 7.5, fig.width = 6,results="hide",fig.cap= average_cap, fig.align = 'center'}
+RW_summary <-  bank.data %>%
+  mutate(RW.ranking = RW.IRB) %>%
+  select(name, Country, RW.ranking, RW.s.Total, RW.hat.Total, RW.IRB)%>%
+  pivot_longer(cols = c("RW.hat.Total","RW.s.Total","RW.IRB"), names_to = "Portfolio", values_to = "RW") %>%
+  mutate(Portfolio = factor(Portfolio, 
+                            levels = c("RW.s.Total", "RW.hat.Total", "RW.IRB"), 
+                            labels = c("j = s","j = c", "j = f")))%>%
+  group_by(Portfolio) %>%
+  dplyr::summarize(mean = round(mean(RW, na.rm = TRUE),2),
+            sd   = round(sd(RW, na.rm = TRUE),2)) %>%
+  mutate(lab = paste("Mean = ", mean, "\n St. Dev. = ", sd, sep = ""))
 
 
+bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>% 
+  mutate(RW.ranking = RW.IRB) %>%
+  select(name, Country, RW.ranking, RW.s.Total, RW.hat.Total, RW.IRB)%>%
+  pivot_longer(cols = c("RW.hat.Total","RW.s.Total","RW.IRB"), names_to = "Portfolio", values_to = "RW") %>%
+  mutate(Portfolio = factor(Portfolio, 
+                            levels = c("RW.s.Total", "RW.hat.Total", "RW.IRB"), 
+                            labels = c("j = s","j = c", "j = f")))%>%
+ ggplot(mapping = aes(x = reorder(name, RW.ranking, FUN = mean, na.rm=TRUE),
+                      y = RW)) +
+geom_point(alpha = 0.5,size = 2) +
+  stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
+    labs(x=NULL) +
+    coord_flip() +
+  labs(y =  unname(TeX(c("$RW^{j}$" )))) +
+  scale_fill_grey()+
+    theme_bw() +
+  facet_wrap(~Portfolio)+
+  geom_text(data = RW_summary, aes(label = lab), x = 3, y = 0.85, size=3.5)
 
-
-
+```
 
 
 
@@ -591,7 +663,7 @@ geom_point(alpha = 0.5,size = 2) +
 ```{r winsorized_data, fig.height = 10, fig.width = 7, results="asis",out.width = "1\\textwidth"}
 ## Set winsorizing limits
 p_w <- c(0.05, 0.95)        
-bank.data.win <- bank.data %>% 
+bank.data.win5 <- bank.data %>% 
   ungroup()%>%
   mutate(year = as.character(year))%>%
   mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)%>%
@@ -600,7 +672,7 @@ bank.data.win <- bank.data %>%
   mutate_at(vars(matches("log.RWA.r")), .funs = list(n = ~sum(!is.na(.)))) 
 
 p_w <- c(0.01, 0.99)        
-bank.data.win2 <- bank.data %>% 
+bank.data.win1 <- bank.data %>% 
   ungroup()%>%
   mutate(year = as.character(year))%>%
   mutate_if(is.numeric,Winsorize,probs = p_w ,na.rm = TRUE)%>%
@@ -610,55 +682,16 @@ bank.data.win2 <- bank.data %>%
 
 ``` 
 
-```{r PD_distribution_data, eval=FALSE, echo=FALSE}
-
-IRB.data <- as.data.frame(pillar3.data) %>%
-  filter(Method2 %in% c("IRB"),
-         PD  < 0.99, EAD > 0) %>%
-  mutate(LGD        = ifelse(is.na(LGD), 0.45, LGD),
-         w.PD       = PD*EAD*LGD,
-         w.EAD      = LGD*EAD) 
-
-PD.distribution <- data.frame()
-
-for(i in c("Total","Wholesale","Retail","Corporate","Sovereign","Banks")){
-PD.distribution <- IRB.data %>%
-  select(bvdid, name, year, w.EAD, PD, Portfolio_1, Portfolio_2) %>%
-  {if(i %in% c("Total")){
-     .
-    }else if(i %in% c("Wholesale","Retail")){
-     filter(., Portfolio_1 %in% c(i))
-    }else{
-     filter(., Portfolio_2 %in% c(i))}} %>%
-  mutate(w.EAD = round(w.EAD/100)) %>%
-  na.omit(cols=c("w.EAD")) %>%
-  expandRows("w.EAD") %>%
-  rbind(PD.distribution)}
-
-
-```
-
-```{r}
-density_cap = "\\label{fig:pdmapcases}The figure shows the two possible outcomes of a negative credit risk shock on a portfolio. The left-hand side plot shows the case where capital savings are procyclical. The right-hand side plot shows the case where capital savings are countercyclical. "
-```
-
-```{r, density, eval=FALSE, fig.height = 3, fig.width = 6,results="hide",out.width = "90%", fig.align = 'center', echo=FALSE, message=FALSE, fig.cap= denisty_cap}
-
-ggplot(PD.distribution) + geom_density(aes(x=PD))
-
-view(select(pillar3.data, name, year, PD, Portfolio_1, Portfolio_2))
-```
+\newpage
 
 # Tables {-}
 
+```{r tables_aux, echo=FALSE}
 
-
-```{r reg_cyclicality_main, echo=FALSE}
-
-# Variables in the model 
 # Dependent variables
 dep.vars <- c(".Total", ".Retail", ".Wholesale", ".Corporate", ".Sovereign", ".Banks")
 dep.text <- c("$j = \\text{Total}$","$j = \\text{Retail}$", "$j = \\text{Wholesale}$", "$j = \\text{Corporate}$", "$j = \\text{Sovereign}$", "$j = \\text{Banks}$")
+
 # Independent variables
 ind.vars <- c("log.gdp_gr")
 ind.text <- c("$\\Delta\\text{Log GDP}_{i,t}$")
@@ -666,18 +699,18 @@ ind.text <- c("$\\Delta\\text{Log GDP}_{i,t}$")
 fe.list <- list(c("Bank FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))),
                 c("Year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))))
 
+```
+
+
+```{r reg_cyclicality_main, echo=FALSE}
+
 # Model formulas
 formula.text <- paste0(paste0("log.RWA.r", dep.vars, "_gr")," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country ")
 formulas <- lapply(formula.text, formula)
 
 # Run the models
 reg.list <- lapply(formulas, function(x) {
-   felm(x, data = bank.data.win)
-})
-
-# Robust standard errors
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+   felm(x, data = bank.data.win5)
 })
 
 ```
@@ -686,10 +719,9 @@ se.list  <-  lapply(reg.list, function(x){
 stargazer(reg.list,
           title = "Capital Savings and the Business Cycle",
           table.layout = "n=c=d#-t-as-",
-          notes = "\\parbox[t]{16.5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Log RWA}_{i,t}^{s,j} = \\beta \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline The dependent variable is the change in the logarithm of \\textit{Capital savings} from portfolio $j$. In all regressions the measure of \\textit{Capital savings} follows equation \\ref{eq:measure1}. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          notes = "\\parbox[t]{16.5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Log RWA}_{i,t}^{s,j} = \\beta \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline The dependent variable is the change in the logarithm of \\textit{Capital savings} from portfolio $j$. In all regressions the measure of \\textit{Capital savings} follows equation \\ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
           dep.var.labels   = dep.text,
           covariate.labels = ind.text,
-          #se               = se.list,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
@@ -707,21 +739,16 @@ stargazer(reg.list,
 ```{r reg_contribution, eval=TRUE, echo=FALSE}
 # Variables in the model 
 # Dependent variables
-dep.vars2 <- c("log.CAR_gr", "log.K_gr", "log.RWA.IRB_gr", "log.RWA.hat.Total_gr", "log.RWA.r.Total_gr")
-dep.text2 <- c("$\\Delta\\text{Log capital ratio}_{i,t}$","$\\Delta\\text{Log capital}_{i,t}$", "$\\Delta\\text{Log RWA}_{i,t}$", "$\\Delta\\text{Log RWA}_{i,t}^{c}$", "$\\Delta\\text{Log RWA}_{i,t}^{s}$")
+dep.vars.temp <- c("log.CAR_gr", "log.K_gr", "log.RWA.IRB_gr", "log.RWA.hat.Total_gr", "log.RWA.r.Total_gr")
+dep.text.temp <- c("$\\Delta\\text{Log capital ratio}_{i,t}$","$\\Delta\\text{Log capital}_{i,t}$", "$\\Delta\\text{Log RWA}_{i,t}^{f}$", "$\\Delta\\text{Log RWA}_{i,t}^{c}$", "$\\Delta\\text{Log RWA}_{i,t}^{s}$")
 
 # Model formulas
-formula.text <- paste0(paste0(dep.vars2)," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country ")
+formula.text <- paste0(paste0(dep.vars.temp)," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country ")
 formulas <- lapply(formula.text, formula)
 
 # Run the models
 reg.list <- lapply(formulas, function(x) {
-  felm(x, data = filter(bank.data.win2, !is.na(log.CAR_gr)))
-})
-
-# Robust standard errors
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+  felm(x, data = filter(bank.data.win1, !is.na(log.CAR_gr)))
 })
 
 # Effect 
@@ -731,9 +758,9 @@ effect.list  <-  lapply(reg.list, function(x){
 effect.list[5] <- 100*reg.list[[5]]$coefficients/reg.list[[1]]$coefficients
 effect.list <-  sprintf("%.1f \\%%",effect.list)
 
-fe.list.car <- list(c("Effect", effect.list),
-                c("Bank FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))),
-                c("Year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))))
+fe.list.car <- list(c("Contribution", effect.list),
+                c("Bank FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars.temp))),
+                c("Year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars.temp))))
 ```
 
 ```{r table_contribution, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
@@ -741,12 +768,10 @@ fe.list.car <- list(c("Effect", effect.list),
 stargazer(reg.list,
           title = "Capital Savings Effect on Capital Ratio Procyclicality",
           table.layout = "n=c=d#-t-as-",
-          notes = "\\parbox[t]{16cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Log RWA}_{i,j,t}^{s} = \\beta \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline  Each column uses one component of the capital ratio according to equation \\ref{eq:decomposition} as dependent variable. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate.  All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
-          dep.var.labels   = dep.text2,
+          notes = "\\parbox[t]{16cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Y}_{i,t}^{s} = \\beta \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline Where $\\Delta\\text{Y}_{i,t}$ is one component of the capital ratio according to equation \\ref{eq:decomposition}. The dependent variables are the change in the logarithm of the capital ratio in column 1, of total capital in column 2, of total RWAs in column 3, of the average component in column 4, and of \\textit{Capital savings} in column 5. The average component is the amount of capital requirements if the portfolio’s average PD is used for the entire portfolio. \\textit{Capital savings} is the ratio of the average component of RWAs to actual RWAs (equation \\ref{eq:measure1}). $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. The table shows the contribution of each component to the cyclicality of capital ratios, which is the respective coefficient divided by the coefficient in column 1. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          dep.var.labels   = dep.text.temp,
           covariate.labels = ind.text,
-          #se               = se.list,
           add.lines        = fe.list.car,
-          #keep            = c("log.gdp_gr"),
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
           type             = "latex",
@@ -757,7 +782,6 @@ stargazer(reg.list,
           label            = "tab:contribution",
           style            = "qje",
           column.sep.width = "2pt",
-          #float.env        = "sidewaystable",
           align            = TRUE)
 
 ```
@@ -768,12 +792,12 @@ stargazer(reg.list,
 \footnotesize
 \begin{tabular}{@{\extracolsep{1pt}}lccccc}
 \multicolumn{6}{c}{\parbox[t]{15.8cm}{The table shows estimates for the following model: \newline \begin{equation*}\Delta \text{Y}_{i,t}^{j} = \beta \Delta\text{Log GDP}_{i,t}+\alpha_{i}+\alpha_{t}+\varepsilon_{i,t}. \end{equation*} \newline 
-The dependent variable is the change in the logarithm of \textit{Capital savings} from portfolio $j$. The measure of \textit{Capital savings} follows equation \ref{eq:measure2} in panel A and equation \ref{eq:RW_savings} in panel B. In Panel C the Gini coefficient is used as alternative measure of the shape of the PD distribution. $\Delta\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\%, 5\%, and 1\% level respectively.}} \\
+The dependent variable is the change in the logarithm of \textit{Capital savings} from portfolio $j$. In Panel A, \textit{Capital savings} are measure in monetary units as RWAs, following equation \ref{eq:measure2}. In Panel B, \textit{Capital savings} are measure in terms of risk-weights, following equation equation \ref{eq:RW_savings}. In Panel C the Gini coefficient is used as alternative measure of the shape of the PD distribution. $\Delta\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\%, 5\%, and 1\% level respectively.}} \\
 [-1.8ex] \\
 \hline \\
 \end{tabular}\\
 \begin{tabular}{@{\extracolsep{1pt}}cccccc}
-\multicolumn{6}{c}{Panel A: $\text{Y}=\text{Log RWA}^{\$}$} \\
+\multicolumn{6}{c}{Panel A: $\text{Y}=\text{Log RWA}^{\$}_{i,t}$} \\
 \end{tabular}
 
 ```{r reg_cyclicality_alt, echo=FALSE}
@@ -783,11 +807,7 @@ formula.text <- paste0(paste0("log.RWA.s", dep.vars, "_gr")," ~ ", paste0(ind.va
 formulas <- lapply(formula.text, formula)
 
 reg.list <- lapply(formulas, function(x) {
-   felm(x, data = bank.data.win)
-})
-
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+   felm(x, data = bank.data.win5)
 })
 
 ```
@@ -799,7 +819,6 @@ table <- capture.output(
           table.layout     = "=c=d#-t-as-",
           dep.var.labels   = dep.text,
           covariate.labels = ind.text,
-          #se              = se.list,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
@@ -808,7 +827,6 @@ table <- capture.output(
           notes.label      = "",
           notes.align      = "c", 
           notes.append     = FALSE,
-          #label            = "tab2",
           style            = "qje",
           column.sep.width = "2pt",
           align            = TRUE,
@@ -823,7 +841,7 @@ cat(table)
 
 \begin{tabular}{@{\extracolsep{1pt}}cccccc}
  \\
-\multicolumn{6}{c}{Panel B: $\text{Y}=\text{Log RW}^{s}$ } \\
+\multicolumn{6}{c}{Panel B: $\text{Y}=\text{Log RW}^{s}_{i,t}$ } \\
 \end{tabular}
 ```{r reg_cyclicality_rw, echo=FALSE}
 
@@ -832,11 +850,7 @@ formula.text <- paste0(paste0("RW.s", dep.vars, "_gr")," ~ ", paste0(ind.vars),"
 formulas <- lapply(formula.text, formula)
 
 reg.list <- lapply(formulas, function(x) {
-   felm(x, data = bank.data.win)
-})
-
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+   felm(x, data = bank.data.win5)
 })
 
 ```
@@ -849,7 +863,6 @@ table <- capture.output(
           table.layout     = "=c=d#-t-as-",
           dep.var.labels   = dep.text,
           covariate.labels = ind.text,
-          #se              = se.list,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
@@ -858,7 +871,6 @@ table <- capture.output(
           notes.label      = "",
           notes.align      = "c", 
           notes.append     = FALSE,
-          #label            = "tab2",
           style            = "qje",
           column.sep.width = "2pt",
           align            = TRUE,
@@ -875,7 +887,7 @@ cat(table)
 
 \begin{tabular}{@{\extracolsep{1pt}}cccccc}
 \\
-\multicolumn{6}{c}{Panel C: $\text{Y}=\text{Log Gini}$ } \\
+\multicolumn{6}{c}{Panel C: $\text{Y}=\text{Log Gini}_{i,t}$ } \\
 \end{tabular}
 
 ```{r reg_cyclicality_gini, echo=FALSE}
@@ -885,11 +897,7 @@ formula.text <- paste0(paste0("gini.PD", dep.vars, "_gr")," ~ ", paste0(ind.vars
 formulas <- lapply(formula.text, formula)
 
 reg.list <- lapply(formulas, function(x) {
-   felm(x, data = bank.data.win)
-})
-
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+   felm(x, data = bank.data.win5)
 })
 
 ```
@@ -902,7 +910,6 @@ table <- capture.output(
           table.layout     = "=c=d#-t-as-",
           dep.var.labels   = dep.text,
           covariate.labels = ind.text,
-          #se              = se.list,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
@@ -911,7 +918,6 @@ table <- capture.output(
           notes.label      = "",
           notes.align      = "c", 
           notes.append     = FALSE,
-          #label            = "tab2",
           style            = "qje",
           column.sep.width = "2pt",
           align            = TRUE,
@@ -926,79 +932,22 @@ cat(table)
 ```
 \end{table}
 
-
-
 \newpage
-
-```{r reg_cyclicality_components, echo=FALSE}
-
-dep.vars2 <- c("log.RWA.SA_gr","RW.SA_gr ", "q.SA_gr", "q.Wholesale_gr", "q.Retail_gr")
-dep.text2 <- c("$\\Delta\\text{Log RWA}_{i,t}^{SA}$", "$\\Delta\\text{Log RW}_{i,t}^{SA}$",
-               "$\\Delta\\text{q}_{i,t}^{SA}$", "$\\Delta\\text{q}_{i,t}^{Wholesale}$", "$\\Delta\\text{q}_{i,t}^{Retail}$")
-
-# Creating formulas and running the models
-formula.text <- paste0(paste0(dep.vars2)," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country ")
-formulas <- lapply(formula.text, formula)
-
-reg.list <- lapply(formulas, function(x) {
- felm(x, data = filter(bank.data.win, year>2007))
-})
-
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
-})
-
-```
-
-
-```{r table_cyclicality_components, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
-
-stargazer(reg.list,
-          title = "Other RWA Components and the Business Cycle",
-          table.layout = "n=c=d#-t-as-",
-          notes = "\\parbox[t]{13.5cm}{The table examines the relationship between the business cycle and other components of RWA. The dependent variable is the change in the logarithm of risk-weighted assets for portfolios under the standardize approach in column 1, the change in risk-weights for portfolios under the standardize approach in column 2, the change in the ratio of exposure under the standardize approach to total exposure in column 3, the change in the wholesale share of the IRB portfolio in column 4, and the change in the retail share of the IRB portfolio in column 5. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
-          dep.var.labels   = dep.text2,
-          covariate.labels = ind.text,
-          #se               = se.list,
-          add.lines        = fe.list,
-          keep.stat        = c("n","rsq"),
-          header           = FALSE, 
-          type             = "latex",
-          font.size        = "small",
-          notes.label      = "",
-          notes.align      = "c", 
-          notes.append     = FALSE,
-          label            = "tab:other",
-          style            = "qje",
-          column.sep.width = "2pt",
-          align            = TRUE)
-
-```
-
-\newpage
-
 
 ```{r reg_moments, echo=FALSE}
 
-ind.text.moments <- c("$\\Delta \\text{Mean(PD}_{i,t}$)", "$\\Delta \\text{Var(PD}_{i,t}$)", "$\\Delta \\text{Skew(PD}_{i,t}$)", "$\\Delta \\text{Kurt(PD}_{i,t}$)")
-
+ind.text.temp <- c("$\\Delta \\text{Log mean(PD}_{i,t}^j$)", "$\\Delta \\text{Log var(PD}_{i,t}^j$)", "$\\Delta \\text{Log skew(PD}_{i,t}^j$)", "$\\Delta \\text{Kurt(PD}_{i,t}^j$)")
 
 reg.list <- list()
 # Run the models
 for(i in dep.vars){
-formula.text <- formula(paste0("log.RWA.r", i, "_gr ~ mean + var + skew   | year + bvdid | 0 | Country "))
- data = rename(bank.data.win,
+formula.text <- formula(paste0("log.RWA.r", i, "_gr ~ mean + var + skew | year + bvdid | 0 | Country"))
+ data = rename(bank.data.win5,
                mean    = paste0("mean.PD"  , i, "_gr"),
                var     = paste0("var.PD"   , i, "_gr"),
                skew    = paste0("skew.PD"  , i, "_gr"))%>%
    felm(data = ., formula = formula.text ) -> reg.list[[i]]
   }
-
-
-# Robust standard errors
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
-})
 
 ```
 
@@ -1008,10 +957,9 @@ se.list  <-  lapply(reg.list, function(x){
 stargazer(reg.list,
           title = "PD moments and Capital Savings",
           table.layout = "n=c=d#-t-as-",
-          notes = "\\parbox[t]{16.5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Log RWA}_{i,t}^{s,j} = \\beta \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline The dependent variable is the change in the logarithm of \\textit{Capital savings} from portfolio $j$. In all regressions the measure of \\textit{Capital savings} follows equation \\ref{eq:measure1}. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          notes = "\\parbox[t]{16.5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Log RWA}_{i,t}^{s,j} = \\beta \\Delta\\text{Log mean(PD}_{i,t}^j\\text{)}+\\gamma\\Delta \\text{Log var(PD}_{i,t}^j\\text{)}+\\kappa\\Delta \\text{Log skew(PD}_{i,t}^j\\text{)}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline The dependent variable is the change in the logarithm of \\textit{Capital savings} from portfolio $j$. In all regressions the measure of \\textit{Capital savings} follows equation \\ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs. $\\Delta\\text{Log mean(PD}_{i,t}^j$) is the change in the logarithm of the average of the portfolio $j$'s PD distribution. $\\Delta\\text{Log var(PD}_{i,t}^j$) is the change in the logarithm of the variance of the portfolio $j$'s PD distribution. $\\Delta\\text{Log skew(PD}_{i,t}^j$) is the change in the logarithm of the skewness of the portfolio $j$'s PD distribution. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
           dep.var.labels   = dep.text,
-          covariate.labels = ind.text.moments,
-          #se               = se.list,
+          covariate.labels = ind.text.temp,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
@@ -1036,28 +984,23 @@ stargazer(reg.list,
 \footnotesize
 \begin{tabular}{@{\extracolsep{1pt}}lccccc}
 \multicolumn{6}{c}{\parbox[t]{15.8cm}{The table shows estimates for the following model: \newline \begin{equation*}\Delta \text{Y}_{i,t}^{j} = \beta \Delta\text{Log GDP}_{i,t}+\alpha_{i}+\alpha_{t}+\varepsilon_{i,t}. \end{equation*} \newline 
-The dependent variable is the change in a PD distribution moment. In panel A the dependent variable is the mean PD, in panel B the variance of PD and in panel C the PD skewness. $\Delta\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\%, 5\%, and 1\% level respectively.}} \\
+The dependent variable is the change in the logarithm of the mean in Panel A, of the variance in Panel B, and of the skewness in Panel C of the portfolio $j$'s PD distribution. $\Delta\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\%, 5\%, and 1\% level respectively.}} \\
 [-1.8ex] \\
 \hline \\
 \end{tabular}\\
 \begin{tabular}{@{\extracolsep{1pt}}cccccc}
-\multicolumn{6}{c}{Panel A: $\text{Y}=\Delta \text{Log mean(PD}_{i,t}\text{)}$} \\
+\multicolumn{6}{c}{Panel A: $\text{Y}=\Delta \text{Log mean(PD}_{i,t}^j\text{)}$} \\
 \end{tabular}
 
 ```{r reg_mean, echo=FALSE}
 
 # Model formulas
-formula.text <- paste0(paste0("mean.PD", dep.vars, "_gr")," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country ")
+formula.text <- paste0(paste0("mean.PD", dep.vars, "_gr")," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country")
 formulas <- lapply(formula.text, formula)
 
 # Run the models
 reg.list <- lapply(formulas, function(x) {
-  felm(x, data = bank.data.win)
-})
-
-# Robust standard errors
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+  felm(x, data = bank.data.win5)
 })
 
 ```
@@ -1070,7 +1013,6 @@ table <- capture.output(
           table.layout     = "=c=d#-t-as-",
           dep.var.labels   = dep.text,
           covariate.labels = ind.text,
-          #se              = se.list,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
@@ -1095,23 +1037,18 @@ cat(table)
 
 \begin{tabular}{@{\extracolsep{1pt}}cccccc}
 \\
-\multicolumn{6}{c}{Panel B: $\text{Y}=\Delta \text{Log var(PD}_{i,t}\text{)}$}
+\multicolumn{6}{c}{Panel B: $\text{Y}=\Delta \text{Log var(PD}_{i,t}^j\text{)}$}
 \end{tabular}
 
 ```{r reg_var, echo=FALSE}
 
 # Model formulas
-formula.text <- paste0(paste0("var.PD", dep.vars, "_gr")," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country ")
+formula.text <- paste0(paste0("var.PD", dep.vars, "_gr")," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country")
 formulas <- lapply(formula.text, formula)
 
 # Run the models
 reg.list <- lapply(formulas, function(x) {
-  felm(x, data = bank.data.win)
-})
-
-# Robust standard errors
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+  felm(x, data = bank.data.win5)
 })
 
 ```
@@ -1150,23 +1087,18 @@ cat(table)
 
 \begin{tabular}{@{\extracolsep{1pt}}cccccc}
 \\
-\multicolumn{6}{c}{Panel C: $\text{Y}=\Delta \text{Log skew(PD}_{i,t}\text{)}$}
+\multicolumn{6}{c}{Panel C: $\text{Y}=\Delta \text{Log skew(PD}_{i,t}^j\text{)}$}
 \end{tabular}
 
 ```{r reg_skew, echo=FALSE}
 
 # Model formulas
-formula.text <- paste0(paste0("skew.PD", dep.vars, "_gr")," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country ")
+formula.text <- paste0(paste0("skew.PD", dep.vars, "_gr")," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country")
 formulas <- lapply(formula.text, formula)
 
 # Run the models
 reg.list <- lapply(formulas, function(x) {
-  felm(x, data = bank.data.win)
-})
-
-# Robust standard errors
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+  felm(x, data = bank.data.win5)
 })
 
 ```
@@ -1179,7 +1111,6 @@ table <- capture.output(
           table.layout     = "=c=d#-t-as-",
           dep.var.labels   = dep.text,
           covariate.labels = ind.text,
-          #se              = se.list,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
@@ -1205,87 +1136,115 @@ cat(table)
 
 \newpage
 
-```{r reg_extension, echo=FALSE, include=FALSE}
+```{r reg_cyclicality_components, echo=FALSE}
 
-# Variables in the model 
-# Independent variables
-aux.1 <- c("log.gdp",
-           "bank_credit_gdp",
-           "pillarI_stringency",
-           #"cap_reg",
-           "Sup_Power",
-           "NPL.ratio",
-           "log.asset",
-           "ROE",
-           "ROA")
-ind.vars  <- paste(aux.1, collapse=" + ")
-ind.text <- c("$\\text{Log GDP}_{i,t}$",
-              "$\\text{Credit-to-GDP}_{i,t}$",
-              "$\\text{Pillar I stringency}_{i,t}$", 
-              #"$\\text{Capital stringency}_{i,t}$", 
-              "$\\text{Official Supervisory power}_{i,t}$",
-               "$\\text{NPL Ratio}_{i,t}$",
-              "$\\text{Log Total Assets}_{i,t}$",
-              # "$\\text{Loans / Total Assets}_{i,t-1}$", 
-              #"$\\text{Net Interest Income / Oper. Rev.}_{i,t-1}$",
-             # "$\\text{Net Income / Total Assets}_{i,t-1}$", 
-              "$\\text{ROE}_{i,t}$",
-              "$\\text{ROA}_{i,t}$")
+dep.vars.temp <- c("log.RWA.SA_gr","RW.SA_gr ", "q.SA_gr", "q.Wholesale_gr", "q.Retail_gr")
+dep.text.temp <- c("$\\Delta\\text{Log RWA}_{i,t}^{SA}$", "$\\Delta\\text{Log RW}_{i,t}^{SA}$",
+               "$\\Delta\\text{q}_{i,t}^{SA}$", "$\\Delta\\text{q}_{i,t}^{Wholesale}$", "$\\Delta\\text{q}_{i,t}^{Retail}$")
 
-fe.list <- list(c("Bank FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))),
-                c("Year FE",    rep("\\multicolumn{1}{c}{Yes}", length(dep.vars))))
-
-# Model formulas
-formula.text <- paste0(paste0("log.RWA.r", dep.vars)," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country")
+# Creating formulas and running the models
+formula.text <- paste0(paste0(dep.vars.temp)," ~ ", paste0(ind.vars)," | year + bvdid | 0 | Country ")
 formulas <- lapply(formula.text, formula)
 
-# Run the models
 reg.list <- lapply(formulas, function(x) {
-  felm(x, data = bank.data.win)
-})
-
-# Robust standard errors
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+ felm(x, data = filter(bank.data.win5, year>2007))
 })
 
 ```
 
 
-```{r table_extension, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE, include=TRUE, eval=TRUE}
+```{r table_cyclicality_components, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
 
 stargazer(reg.list,
-          title = "Correlates of Capital Savings",
+          title = "Other RWA Components and the Business Cycle",
           table.layout = "n=c=d#-t-as-",
-          notes = "\\parbox[t]{17cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\text{Log RWA}^{s}_{i,t} = \\gamma X_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline  The first line of the table show the dependent variable in each regression. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. $X_{i,t-1}$ is a vector of independent variables. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
-          
-          dep.var.labels   = dep.text,
+          notes = "\\parbox[t]{13.5cm}{The table examines the relationship between the business cycle and other components of RWA. The dependent variable is the change in the logarithm of risk-weighted assets for portfolios under the standardize approach in column 1, the change in risk-weights for portfolios under the standardize approach in column 2, the change in the ratio of exposure under the standardize approach to total exposure in column 3, the change in the wholesale share of the IRB portfolio in column 4, and the change in the retail share of the IRB portfolio in column 5. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          dep.var.labels   = dep.text.temp,
           covariate.labels = ind.text,
-          se               = se.list,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
           type             = "latex",
-          font.size        = "footnotesize",
+          font.size        = "small",
           notes.label      = "",
           notes.align      = "c", 
           notes.append     = FALSE,
-          label            = "tab:extension",
+          label            = "tab:other",
           style            = "qje",
-          column.sep.width = "-3pt",
-          #float.env        = "sidewaystable",
+          column.sep.width = "2pt",
           align            = TRUE)
+
 ```
 
 \newpage
-\section*{Appendix A} \label{sec:appendixa}
 
-\setcounter{table}{0}
-\renewcommand{\thetable}{A\arabic{table}}
+\appendix 
+
+\section{} \label{sec:appendixa}
+\setcounter{figure}{0}
+\renewcommand{\thefigure}{A\arabic{figure}}
+
+
+```{r}
+derivatives = "\\label{fig:derivatives} The figure plots risk-weights as a function of probability of default (top-left) and its first, second, and third derivative with respect to probability of default (top-right, bottom-left, and bottom-right, respectively)."
+```
+```{r, fig.cap= derivatives, fig.align="center"}
+p1 <- ggdraw() + draw_image("../../Auxiliar/Pictures/function.jpg", scale = 0.9)
+p2 <- ggdraw() + draw_image("../../Auxiliar/Pictures/first_derivative.jpg", scale = 0.9)
+p3 <- ggdraw() + draw_image("../../Auxiliar/Pictures/second_derivative.jpg", scale = 0.9)
+p4 <- ggdraw() + draw_image("../../Auxiliar/Pictures/third_derivative.jpg", scale = 0.9)
+
+
+plot_grid(p1,p2,p3,p4, ncol = 2)  
+```
+```{r}
+densities = "\\label{fig:densities} The figure plots probability of default histograms by portfolio for all banks and years. The last bin contains all observations with PD higher or equal to 25%. Defaulted exposures are excluded."
+```
+
+```{r, fig.height = 6, fig.width = 6, results="hide",fig.cap= densities, include=TRUE}
+
+PD_summary <-  pillar3.data %>%
+  select(name, PD, EAD, Portfolio_2, Portfolio_1) %>%
+  filter(EAD>0, PD<1, Portfolio_2 %in% c("Banks", "Corporate", "Sovereign") | Portfolio_1 %in% c("Retail"))%>%
+  na.omit(cols=c("EAD", "Portfolio")) %>%
+  mutate(EAD = round(EAD/10))%>%
+  expandRows("EAD")%>%
+  mutate(Portfolio = ifelse(Portfolio_1 == "Retail", "Retail", as.character(Portfolio_2)),
+         low25PD = ifelse(PD<0.25,1,0),
+         low5PD = ifelse(PD<0.05,1,0)) %>%
+           group_by(Portfolio) %>%
+  dplyr::summarize(mean = round(100*mean(PD),2),
+            sd   = round(100*sd(PD),2),
+            p25 = round(100*sum(low25PD)/n(),2),
+            p5 = round(100*sum(low5PD)/n(),2)) %>%
+  mutate(lab = paste("Mean = ", mean, "% \n St. Dev. = ", sd, "% \n P(PD<25%) = ",p25,"% \n P(PD<5%) = ",p5, "%", sep = ""))
+
+
+ pillar3.data %>%
+ select(name, PD, EAD, Portfolio_2, Portfolio_1) %>%
+  filter(EAD>0, PD<1, Portfolio_2 %in% c("Banks", "Corporate", "Sovereign") | Portfolio_1 %in% c("Retail"))%>%
+  mutate(Portfolio = ifelse(Portfolio_1 == "Retail", "Retail", as.character(Portfolio_2)),
+         EAD = round(EAD/10),
+         PD = ifelse(PD>0.25, 0.25, PD)) %>%
+  na.omit(cols=c("EAD", "Portfolio")) %>%
+  expandRows("EAD")%>%
+  ggplot(mapping = aes(x = PD)) +
+    geom_histogram(aes(y=..density..), bins = 50)+
+  labs(x=NULL, y= NULL) +
+   theme_bw() +
+  theme(panel.grid.minor = element_blank())+
+  scale_fill_grey() +
+  facet_wrap(~ Portfolio) +
+  geom_text(data = PD_summary, aes(label = lab), x = 0.15, y = 150)
+
+
+```
+
+
 
 
 \newpage
-\section*{Appendix B} \label{sec:appendixb}
+\section{}  \label{sec:appendixb}
 
 \setcounter{table}{0}
 \renewcommand{\thetable}{B\arabic{table}}
@@ -1299,7 +1258,7 @@ stargazer(reg.list,
 \end{tabular}
 
 ```{r summary1,  fig.height = 10, fig.width = 7, results="asis",out.width = "1\\textwidth"}
-table <-capture.output({bank.data.win %>%
+table <-capture.output({bank.data.win5 %>%
         filter(year>2007) %>% 
   select(
   log.RWA.r.Total_gr,
@@ -1398,7 +1357,7 @@ table <- c(table[1:8],"Panel A: Main dependent variables \\\\",table[-(1:8)])
 table <- c(table[1:21],"Panel B: Alternative measures \\\\",table[-(1:21)])
 table <- c(table[1:21]," \\\\[-1.8ex]",table[-(1:21)])
 
-table <- c(table[1:41],"Panel C: Other dependet variables \\\\",table[-(1:41)])
+table <- c(table[1:41],"Panel C: Other dependent variables \\\\",table[-(1:41)])
 table <- c(table[1:41],"\\\\[-1.8ex]",table[-(1:41)])
 
 table <- gsub("}lD{.}{.}{-3}",  "}p{0.35\\textwidth}D{.}{.}{4.1}", table, fixed = T)
@@ -1411,7 +1370,6 @@ cat(table)
 
 \end{table}
 
-
 \begin{table}[!htbp] \centering
 \begin{tabular}{@{\extracolsep{1pt}}cccccc}
 \multicolumn{6}{c}{\parbox[c]{13cm}{\centering \tablename\ \thetable{} -- continued from previous page}}\\
@@ -1419,7 +1377,7 @@ cat(table)
 \footnotesize
 
 ```{r summary3, fig.height = 10, fig.width = 7, results="asis",out.width = "1\\textwidth"}
-table <- capture.output({bank.data.win %>%
+table <- capture.output({bank.data.win5 %>%
                          filter(year>2007) %>% 
   select(
   mean.PD.Total_gr, 
@@ -1440,17 +1398,21 @@ table <- capture.output({bank.data.win %>%
   skew.PD.Corporate_gr, 
   skew.PD.Sovereign_gr, 
   skew.PD.Banks_gr,
-  log.gdp_gr,
-  log.gdp,
-  credit_gdp,
-  pillarI_stringency,
-  cap_reg,
-  Sup_Power,
+  log.asset_gr,
+  NPL.ratio_gr,
   log.asset,
   NPL.ratio,
+  deposit.ratio,
+  NII.ratio,
   Zscore,
   ROE,
-  ROA) %>%
+  ROA,
+  log.gdp_gr,
+  credit_gdp_gr,
+  log.gdp,
+  credit_gdp,
+  cap_reg,
+  Sup_Power) %>%
   as.data.frame() %>% 
 stargazer(header = FALSE, type="latex", single.row = TRUE, column.sep.width = "1pt", font.size = "footnotesize",
           label = "tab:summary",
@@ -1474,17 +1436,21 @@ stargazer(header = FALSE, type="latex", single.row = TRUE, column.sep.width = "1
               "\\hspace{1.0cm}$\\Delta$ Log PD skewness corporate",
               "\\hspace{1.0cm}$\\Delta$ Log PD skewness sovereign", 
               "\\hspace{1.0cm}$\\Delta$ Log PD skewness banks", 
-              "$\\Delta \\text{Log GDP}$",
-              "Log GDP",
-              "Credit / GDP",
-              "Capital Stringency Index",
-              "Pillar I Stringency",
-              "Official Supervisory Power",
-              "Log Total Assets",
-              "Non-performing Loans / Loans",
+              "$\\Delta \\text{Log total assets}$",
+              "$\\Delta \\text{NPL / loans}$",
+              "Log total assets",
+              "NPL / loans",
+              "Deposit / total assets",
+              "NII / oper. rev.",
               "Z-score",
               "ROE",
-              "ROA"),
+              "ROA",
+               "$\\Delta \\text{Log GDP}$",
+              "$\\Delta \\text{Credit / GDP}$",
+              "Log GDP",
+              "Credit / GDP",
+              "Capital stringency",
+              "Official supervisory power"),
           notes.label = "",
           notes.align = "c", 
           notes.append = FALSE,
@@ -1496,46 +1462,73 @@ stargazer(header = FALSE, type="latex", single.row = TRUE, column.sep.width = "1
 
 table <- c(table[1:8],"Panel D: PD distribution moments \\\\",table[-(1:8)])
 
-table <- c(table[1:33],"Panel E: Independent variables \\\\",table[-(1:33)])
-table <- c(table[1:33]," \\\\[-1.8ex]",table[-(1:33)])
+table <- c(table[1:27],"Panel E: Other bank-level variables \\\\",table[-(1:27)])
+table <- c(table[1:27]," \\\\[-1.8ex]",table[-(1:27)])
+
+table <- c(table[1:39],"Panel F: Country-level variables \\\\",table[-(1:39)])
+table <- c(table[1:39]," \\\\[-1.8ex]",table[-(1:39)])
 
 table <- gsub("}lD{.}{.}{-3}",  "}p{0.35\\textwidth}D{.}{.}{4.1}", table, fixed = T)
-
-#table <- gsub("{-3}", "{3.4}", table, fixed = T)
 
 cat(table)
 ``` 
 
 \end{table}
 
+\newpage
+\section{}  \label{sec:appendixc}
 
-```{r reg_constant, echo=FALSE}
+\setcounter{table}{0}
+\renewcommand{\thetable}{C\arabic{table}}
 
-reg.list <- list()
+```{r reg_extension, echo=FALSE, include=FALSE}
+
+# Variables in the model 
+# Independent variables
+aux.1 <- c("log.gdp_gr",
+           "bank_credit_gdp_gr",
+           "log.gdp",
+           "cap_reg",
+           "Sup_Power",
+           "log.asset_gr",
+           "NPL.ratio_gr",
+           "log.asset",
+           "NPL.ratio",
+           "deposit.ratio",
+           "NII.ratio")
+ind.vars.temp  <- paste(aux.1, collapse=" + ")
+ind.text <- c("$\\Delta\\text{Log GDP}_{i,t}$",
+              "$\\Delta\\text{Credit / GDP}_{i,t}$",
+              "$\\text{Log GDP}_{i,t}$",
+              "$\\text{Capital stringency}_{i,t}$", 
+              "$\\text{Official supervisory power}_{i,t}$",
+              "$\\Delta\\text{Log total assets}_{i,t}$",
+              "$\\Delta\\text{NPL / loans}_{i,t}$",
+              "$\\text{Log total assets}_{i,t}$",
+              "$\\text{NPL / loans}_{i,t}$",
+              "$\\text{Deposit / total assets}_{i,t}$",
+              "$\\text{NII / oper. rev.}_{i,t}$")
+
+# Model formulas
+formula.text <- paste0(paste0("log.RWA.r", dep.vars,"_gr")," ~ ", paste0(ind.vars.temp)," | year + bvdid | 0 | Country")
+formulas <- lapply(formula.text, formula)
+
 # Run the models
-for(i in dep.vars){
-formula.text <- formula(paste0("log.RWA.r", i, "_gr ~ log.gdp_gr | year + bvdid | 0 | Country "))
- data = filter(bank.data.win,
-               get(paste0("log.RWA.r"  , i, "_gr_n"))>9)%>%
-   felm(data = ., formula = formula.text ) -> reg.list[[i]]
-  }
-
-
-# Robust standard errors
-se.list  <-  lapply(reg.list, function(x){
-  summary(x, robust=TRUE)$coefficients[,2]
+reg.list <- lapply(formulas, function(x) {
+  felm(x, data = bank.data.win5)
 })
 
 ```
 
-```{r table_constant, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+```{r table_extension, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE, include=TRUE, eval=TRUE}
+
 stargazer(reg.list,
-          title = "Capital Savings and the Business Cycle",
+          title = "Capital Savings and the Business Cycle: Control Variables",
           table.layout = "n=c=d#-t-as-",
-          notes = "\\parbox[t]{16.5cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Log RWA}_{i,t}^{s,j} = \\beta \\Delta\\text{Log GDP}_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline The dependent variable is the change in the logarithm of \\textit{Capital savings} from portfolio $j$. In all regressions the measure of \\textit{Capital savings} follows equation \\ref{eq:measure1}. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
+          notes = "\\parbox[t]{17cm}{The table shows estimates for the following model: \\newline \\begin{equation*}\\Delta \\text{Log RWA}^{s,j}_{i,t} =\\beta \\Delta\\text{Log GDP}_{i,t} + \\gamma \\Delta  X_{i,t}+\\alpha_{i}+\\alpha_{t}+\\varepsilon_{i,t}. \\end{equation*} \\newline The dependent variable is the change in the logarithm of \\textit{Capital savings} from portfolio $j$. In all regressions the measure of \textit{Capital savings} follows equation \ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs. $\\Delta\\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. $X_{i,t}$ is a vector of independent variables. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\\%, 5\\%, and 1\\% level respectively.}",
           dep.var.labels   = dep.text,
           covariate.labels = ind.text,
-          #se               = se.list,
           add.lines        = fe.list,
           keep.stat        = c("n","rsq"),
           header           = FALSE, 
@@ -1544,10 +1537,109 @@ stargazer(reg.list,
           notes.label      = "",
           notes.align      = "c", 
           notes.append     = FALSE,
-          label            = "tab:constant",
+          label            = "tab:extension",
           style            = "qje",
-          column.sep.width = "1pt",
+          column.sep.width = "-3pt",
           align            = TRUE)
 ```
 
+\begin{table}[!htbp] \centering  
+\caption{Capital Savings and the Business Cycle: Robustness to Alternative Samples}  
+\label{tab:robustness}
+\footnotesize
+\begin{tabular}{@{\extracolsep{1pt}}lccccc}
+\multicolumn{6}{c}{\parbox[t]{15.8cm}{The table shows estimates for the following model: \newline \begin{equation*}\Delta \text{Log RWA}_{i,t}^{s,j} = \beta \Delta\text{Log GDP}_{i,t}+\alpha_{i}+\alpha_{t}+\varepsilon_{i,t}. \end{equation*} \newline The dependent variable is the change in the logarithm of \textit{Capital savings} from portfolio $j$. In all regressions the measure of \textit{Capital savings} follows equation \ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs. $\Delta\text{Log GDP}_{i,t}$ is the real GDP per capita growth rate. All regressions include bank and year fixed effects. Robust standard errors adjusted for clustering at the country level are reported in parentheses. *, **, and *** indicate statistical significance at the 10\%, 5\%, and 1\% level respectively.}} \\
+[-1.8ex] \\
+\hline \\
+\end{tabular}\\
+\begin{tabular}{@{\extracolsep{1pt}}cccccc}
+\multicolumn{6}{c}{Panel A: Balance panel} \\
+\end{tabular}
 
+```{r reg_constant, echo=FALSE}
+
+reg.list <- list()
+# Run the models
+for(i in dep.vars){
+formula.text <- formula(paste0("log.RWA.r", i, "_gr ~ log.gdp_gr | year + bvdid | 0 | Country"))
+ data = filter(bank.data.win5,
+               get(paste0("log.RWA.r"  , i, "_gr_n"))>9)%>%
+   felm(data = ., formula = formula.text ) -> reg.list[[i]]
+  }
+
+```
+
+
+```{r table_constant, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+table <- capture.output(
+{stargazer(reg.list,
+          table.layout     = "=c=d#-t-as-",
+          dep.var.labels   = dep.text,
+          covariate.labels = ind.text,
+          add.lines        = fe.list,
+          keep.stat        = c("n","rsq"),
+          header           = FALSE, 
+          type             = "latex",
+          font.size        = "footnotesize",
+          notes.label      = "",
+          notes.align      = "c", 
+          notes.append     = FALSE,
+          style            = "qje",
+          column.sep.width = "2pt",
+          align            = TRUE,
+          float            = FALSE)})
+
+table <- gsub("{-3}",
+              "{5.5}"
+              , table, fixed = T)
+
+cat(table)
+
+```
+
+\begin{tabular}{@{\extracolsep{1pt}}cccccc}
+\\
+\multicolumn{6}{c}{Panel B: Sample winsorized at 1\%}
+\end{tabular}
+
+```{r reg_winsorized, echo=FALSE}
+
+# Run the models
+formula.text <- paste0(paste0("log.RWA.r", dep.vars, "_gr ~ log.gdp_gr | year + bvdid | 0 | Country"))
+formulas <- lapply(formula.text, formula)
+reg.list <- lapply(formulas, function(x) {
+   felm(x, data = bank.data.win1)
+})
+
+```
+
+```{r table_winsorized, eval=TRUE, echo=FALSE, results='asis', warning=FALSE, message=FALSE}
+
+table <- capture.output(
+{stargazer(reg.list,
+          table.layout     = "=c=d#-t-as-",
+          dep.var.labels   = dep.text,
+          covariate.labels = ind.text,
+          add.lines        = fe.list,
+          keep.stat        = c("n","rsq"),
+          header           = FALSE, 
+          type             = "latex",
+          font.size        = "footnotesize",
+          notes.label      = "",
+          notes.align      = "c", 
+          notes.append     = FALSE,
+          style            = "qje",
+          column.sep.width = "2pt",
+          align            = TRUE,
+          float            = FALSE)})
+
+table <- gsub("{-3}",
+              "{5.5}"
+              , table, fixed = T)
+
+cat(table)
+
+```
+
+\end{table}
