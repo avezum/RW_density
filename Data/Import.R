@@ -23,11 +23,11 @@ rm(list = ls())
 
 # IRB adoption year
 IRB.indicator <- read_xlsx("Data/Raw/Pillar3/Auxiliar/Auxiliar.xlsx",sheet = 1)  %>%
-  rename_if(is.numeric, function(x) paste("IRB", x, sep = ".")) %>%
-  reshape(varying   = c(grep("[0-9]", names(.))),
-          direction = 'long', 
-          timevar   ='year')%>%
-  select(name, Country, bvdid_new, bvdid_old, year, IRB)
+  pivot_longer(cols      = where(is.numeric),
+               names_to  = "year",
+               values_to = "IRB")%>%
+  select(name, Country, bvdid_new, bvdid_old, year, IRB)%>%
+  mutate(year= as.numeric(year))
 
 # Basel II introduction
 basel.indicator <- read_xlsx("Data/Raw/Pillar3/Auxiliar/Auxiliar.xlsx",sheet = 2) %>%
@@ -158,23 +158,23 @@ data.list  <- data.names %>%
 for(i in 1:length(data.list)) {
   data.list[[i]] <- data.list[[i]] %>%
     # Remove row index, set variables names to lower case, rename id variable, and keep only selected sample
-    select(-contains("_"))  %>%
     rename_all(tolower)%>%
     rename_at(vars(contains("bvd")), 
               funs(str_replace(.,"bvd .*", "bvdid")))%>%
-    mutate(disk = paste(i)) %>% select(disk, everything()) %>%
+    mutate(disk = paste(i)) %>% select(disk, everything())%>%
     # Standardize variables names to reshape dataset from wide to long
-    # The first two lines of code remove several caracteres, the second add a dot before the year indicator
-    rename_at(vars(contains("last")), 
-              funs(str_replace(.,"last .*", "10")))%>%
-  rename_all(funs(str_replace_all(.,"[[:space:]]|[\\(*\\),]|\\[|\\]|\\%|\\/|\\.|\\=|\\-|year","")))%>%
-  rename_all(funs(str_replace_all(.,"([\\w])([0-9]+)$", "\\1\\.\\2")))
-  # Reshape datasets to long format
-  data.list[[i]] <- reshape(data.list[[i]],
-                            varying   = c(grep("10", names(data.list[[i]]))[1]:ncol(data.list[[i]])),
-                            direction = 'long', 
-                            timevar   = 'year')
-  names(data.list[[i]]) <- names(data.list[[1]])
+    rename_all(funs(str_replace_all(.,"[:space:]|[:punct:]|year|=","")))%>%
+    rename_at(vars(contains("lastavailyr")), 
+              funs(str_replace(.,"last.*", "10")))%>%
+    rename_all(funs(str_replace_all(.,"([\\w])([0-9]+)$", "\\1\\.\\2")))%>%
+    # Turn numeric variables to numeric format
+    mutate_at(c(grep("usd", names(.))[1]:ncol(.)),as.numeric) %>%
+    # Reshape datasets to long format
+    pivot_longer(cols = c(grep("\\.\\d", names(.))),
+                 names_to = c(".value", "year"),
+                 names_pattern = "(.+)\\.(.+)")
+    # Standardize variable names across datasets
+    names(data.list[[i]]) <- names(data.list[[1]])
 }
 
 # Bind datasets from different disks  
@@ -203,11 +203,9 @@ bankscope <- bankscope %>%
          Country = ifelse(is.na(Country.x),Country.y,Country.x)) %>%
   # Reorder variables and remove auxiliar variables
   select(name,  Country, IRB, everything(), -contains("_"), -contains("."),
-         -c("companyname", "countryisocode","lastavail", "id", "guoname", "conscode",
+         -c("companyname", "countryisocode","lastavail", "guoname", "conscode",
             "status", "listeddelistedunlisted", "delisteddate", "guobvdid", "guocountryisocode",
-            "guotype", "closingdate", "month", "1", "IRB")) %>% 
-  # Turn numeric variables to numeric format
-  mutate_at(c(grep("usd", names(.))[1]:ncol(.)),as.numeric) 
+            "guotype", "closingdate", "month", "1", "IRB"))
 
 # Save data frame
 save(bankscope,file=paste0("Data/Temp/BankScope.Rda"))

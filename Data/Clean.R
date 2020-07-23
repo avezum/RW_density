@@ -137,13 +137,13 @@ save(pillar3.data,file=paste0("Data/Datasets/Pillar3Data.Rda"))
 
 # Auxiliar table used to include all bank observations when calculating the mean benchmark
 sample <- read_xlsx("Data/Raw/Pillar3/Auxiliar/Auxiliar.xlsx",sheet = 1)  %>%
-  rename_if(is.numeric, function(x) paste("IRB", x, sep = ".")) %>%
-  reshape(varying   = c(grep("[0-9]", names(.))),
-          direction = 'long', 
-          timevar   ='year')%>%
+  pivot_longer(cols      = where(is.numeric),
+               names_to  = "year",
+               values_to = "IRB")%>%
   select(name, Country, bvdid = bvdid_new, year, IRB)%>%
   filter(!is.na(IRB)) %>%
-  select(-IRB)
+  select(-IRB) %>%
+  mutate(year= as.numeric(year))
 
 #------------------------------------------------------------------------------#
 # Merge Pillar-III data by bank to bankscope                                   #
