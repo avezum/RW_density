@@ -34,7 +34,7 @@ spacing: double
 indent: true
 subtitle: ''
 thanks: Preliminary draft.
-JEL: G21, G28, G11
+JEL: G11, G21, G28 
 urlcolor: black
 toc: FALSE
 ---
@@ -74,7 +74,7 @@ library(ggpubr)               ## More plots
 library(splitstackshape)      ## Command to expand data
 library(latex2exp)            ## Use latex code in plots
 library(lemon)                ## Plot brackets
-library(mosaic)               ## Package to calculate derivatives
+#library(mosaic)               ## Package to calculate derivatives
 #library(textablr)
 #library(sandwich)
 #library(lmtest)
@@ -110,9 +110,9 @@ To calculate *Capital savings*, I hand-collected information on the distribution
 
 With this novel dataset, I investigate the relationship between *Capital savings* and the business cycle. Between the two capital requirement components, the average component is a source of the procyclicality as long the relationship between the business cycle and PD estimates is monotonic. Conversely, the direction of *Capital savings* during the business cycle is not trivial even when assuming a monotonic relationship between PD estimates and the business cycle. The ambiguity arises because *Capital savings* can only increase during a recession, and therefore be countercyclical, if the shape of the PD distribution is affected during the business cycle. If the PD estimates of the the assets in a portfolio are equally affected during the business cycle, then there is only a shift of the location parameter of the PD distribution. Because the PD elasticity of capital requirements is lower for higher PD estimates, in this scenario *Capital savings* are procyclical. On the other hand, if riskier assets are sufficiently more sensitive to credit shocks than safer assets, then *Capital savings* are countercyclical.  
 
-I find *Capital savings* to be countercyclical. I estimate that a 1.7% GDP growth rate (one standard deviation) decreases the growth rate of *Capital savings* by 0.8 percentage points on average. In other words, given an average PD, banks have to increase capital by 0.8 percentage points to keep their capital ratio constant. The effect is also economically significant. The variation of *Capital savings* during the business cycle reduces the procyclicality of capital ratio by 23.7% on average. The results also suggest that the countercyclical relationship between GDP and *Capital savings* is mostly driven by wholesale portfolios, especially corporate portfolios. The results are robust to different measures of the shape component, to the inclusion of several control variables and the alternative sample selections. I also show that selection into the IRB approach does not explain the cyclicality of *Capital savings*.      
+I find *Capital savings* to be countercyclical. I estimate that a 1.7% GDP growth rate (one standard deviation) decreases the growth rate of *Capital savings* by 0.8 percentage points on average. In other words, given an average PD, banks have to increase capital by 0.8 percentage points to keep their capital ratio constant. The effect is also economically significant. The variation of *Capital savings* during the business cycle reduces the procyclicality of capital ratio by 23.7% on average. The results also suggest that the countercyclical relationship between GDP and *Capital savings* is mostly driven by wholesale portfolios, especially corporate portfolios. The results are robust to different measures of the shape component, to the inclusion of several control variables and alternative sample selections. I also show that selection into the IRB approach does not explain the cyclicality of *Capital savings*.      
 
-I further analyse the relationship of the PD distribution moments with GDP growth and find that during economic recessions average and variance of PD distributions increase while the their skewness decrease. Although the effect of the average PD is stronger, which characterizes capital requirements as procyclical, both the higher variance and the lower skewness of the PD distribution mitigate the increase of capital requirements during recessions. Moreover, I argue that the change of skewness during the business cycle is consistent with a portfolio reallocation effect on *Capital savings*.
+I further analyse the relationship of the PD distribution moments with GDP growth and find that during economic recessions the average and the variance of PD distributions increase while the their skewness decrease. Although the effect of the average PD is stronger, which characterizes capital requirements as procyclical, both the higher variance and the lower skewness of the PD distribution mitigate the increase of capital requirements during recessions. Moreover, I argue that the change of skewness during the business cycle is consistent with a portfolio reallocation effect on *Capital savings*.
 
 This papers contributes to two strands of the banking literature. First, several studies document significant capital requirements variability across otherwise similar banks. Some take this evidence as indicative of either excessive subjectivity in the current capital requirement rules or risk measurement manipulation by banks to decrease capital charges [see, @mariathasan2014manipulation; @ferribank]. Others are more cautious and emphasize that part of the capital requirements variability is desirable since it reflects differences in risk among banks [@cannata2012inside; @BCBS2016regulatory;@berg2017analysis; @EBA2019result]. I contribute to the literature by showing that *Capital savings* are an important source of capital requirements variation across banks.  
 
@@ -396,7 +396,7 @@ pd_map_cap <-  "\\label{fig:pdmap}The figure plots the mapping from PD to risk-w
 
 ```
 
-```{r, fig.height = 3, fig.width = 4,results="hide", fig.cap = pd_map_cap, fig.align = 'center', echo=FALSE, message=FALSE}
+```{r mapping, fig.height = 3, fig.width = 4,results="hide", fig.cap = pd_map_cap, fig.align = 'center', echo=FALSE, message=FALSE}
 p <- ggplot(data = subset(data,subset = PD <0.2),
             mapping = aes(x = PD, y=K)) 
 p + geom_line(alpha = 1) + 
@@ -548,7 +548,7 @@ ggplot(data = subset(data,subset = PD <0.2),
 savings_cap = "\\label{fig:savingsbank}The figure plots \\textit{Capital savings} using equation \\ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs, as measure. Each point in the plot is a bank-year observation and bars are the averages across time for each bank."
 ```
 
-```{r, include = TRUE, fig.height = 7.5, fig.width = 5,results="hide",fig.cap= savings_cap, fig.align = 'center'}
+```{r savings_by_bank, include = TRUE, fig.height = 5.5, fig.width = 4,results="hide",fig.cap= savings_cap, fig.align = 'center'}
 bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>% 
   select(name, Country, RWA.r.Total)%>%
   group_by(name, Country) %>%
@@ -562,13 +562,14 @@ bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>%
   #       Country = fct_reorder(Country, ordering)) %>%
  ggplot(mapping = aes(x = reorder(name, RWA.r.Total, FUN = mean, na.rm=TRUE),
                       y = RWA.r.Total)) +
-geom_point(alpha = 0.5,size = 2) +
-  stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
+geom_point(alpha = 0.5,size = 1) +
+  stat_summary(fun.y="mean", geom="bar",alpha = 0.3, aes(width=0.6)) +
     labs(x=NULL) +
     coord_flip(ylim=c(1, 2.5)) +
   labs(y =  unname(TeX(c("$RWA^{s}$" )))) +
   scale_fill_grey()+
-    theme_bw()
+    theme_bw()+
+  theme(text = element_text(size=8))
 
 ```
 
@@ -576,7 +577,7 @@ geom_point(alpha = 0.5,size = 2) +
 savings_cap_country = "\\label{fig:savingscountry}The figure plots \\textit{Capital savings} using equation \\ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs, as measure. Each point is the across time average \\textit{Capital savings} for a bank and the bars are the average across banks within a country."
 ```
 
-```{r, include=TRUE, fig.height = 4, fig.width = 3,results="hide",fig.cap= savings_cap_country, fig.align = 'center'}
+```{r savings_by_country, include=TRUE, fig.height = 3, fig.width = 3,results="hide",fig.cap= savings_cap_country, fig.align = 'center'}
 bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid) %>% 
   select(country.name,name, year, RWA.r.Total)%>%
   group_by(country.name,name) %>%
@@ -595,7 +596,19 @@ geom_point(alpha = 0.5,size = 2) +
 savings_portfolio_cap = "\\label{fig:savingsportfoliobank}The figure plots \\textit{Capital savings} using equation \\ref{eq:measure1}, the ratio of the average component of RWAs to actual RWAs, as measure. The left-hand side plots shows \\textit{Capital savings} for wholesale portfolios and the right-hand side for retail portfolios. Each point in the plot is a bank-year observation and bars are the averages across time for each bank."
 ```
 
-```{r, include = TRUE, fig.height = 7.5, fig.width = 6,results="hide",fig.cap= savings_portfolio_cap, fig.align = 'center'}
+```{r savings_by_portfolio, include = TRUE, fig.height = 5.5, fig.width = 5,results="hide",fig.cap= savings_portfolio_cap, fig.align = 'center'}
+
+RW_summary <-  bank.data %>%ungroup()%>%
+  select(name, Country, RWA.r.Total, RWA.r.Retail, RWA.r.Wholesale)%>%
+  dplyr::summarise(across(c("RWA.r.Retail","RWA.r.Wholesale"), 
+                          ~round(cor(RWA.r.Total,., use="complete.obs"),2),))%>%
+  pivot_longer(cols = everything(), names_to = "Portfolio", values_to = "Corr")%>%
+   mutate(Portfolio = factor(Portfolio, 
+                            levels = c("RWA.r.Wholesale","RWA.r.Retail"), 
+                            labels = c("Wholesale","Retail")))%>%
+  mutate(lab = paste("Correlation = ", Corr, sep = ""))
+
+
 bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>% 
   select(name, Country, RWA.r.Total, RWA.r.Retail, RWA.r.Wholesale)%>%
   pivot_longer(cols = c("RWA.r.Retail","RWA.r.Wholesale"), names_to = "Portfolio", values_to = "RWA.r") %>%
@@ -604,14 +617,17 @@ bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>%
                             labels = c("Wholesale","Retail")))%>%
  ggplot(mapping = aes(x = reorder(name, RWA.r.Total, FUN = mean, na.rm=TRUE),
                       y = RWA.r)) +
-geom_point(alpha = 0.5,size = 2) +
-  stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
+geom_point(alpha = 0.5,size = 1) +
+  stat_summary(fun.y="mean", geom="bar",alpha = 0.3, aes(width=0.6)) +
     labs(x=NULL) +
     coord_flip(ylim=c(1, 3.5)) +
   labs(y =  unname(TeX(c("$RWA^{s}$" )))) +
   scale_fill_grey()+
     theme_bw() +
+  theme(text = element_text(size=8))+
   facet_wrap(~Portfolio)
+#+
+ # geom_text(data = RW_summary, aes(label = lab), x = 4, y = 2.8, size=2.5)
 
 ```
 
@@ -621,7 +637,7 @@ geom_point(alpha = 0.5,size = 2) +
 average_cap = "\\label{fig:averagebank}The figure plots, in terms of risk-weights, \\textit{Capital savings} ($\\text{RW}^s$), the average component ($\\text{RW}^c$), and total risk-weights ($\\text{RW}^f$), following equations \\ref{eq:RW_savings}, \\ref{eq:RW_counterfactual}, and \\ref{eq:RW_factual}, respectively. Each point in the plot is a bank-year observation and bars are the averages across time for each bank."
 ```
 
-```{r, include = TRUE, fig.height = 7.5, fig.width = 6,results="hide",fig.cap= average_cap, fig.align = 'center'}
+```{r decomposition, include = TRUE, fig.height = 5.5, fig.width = 5,results="hide",fig.cap= average_cap, fig.align = 'center'}
 RW_summary <-  bank.data %>%
   mutate(RW.ranking = RW.IRB) %>%
   select(name, Country, RW.ranking, RW.s.Total, RW.hat.Total, RW.IRB)%>%
@@ -644,15 +660,16 @@ bank.data %>% filter(RWA.r.Total>0, bvdid %in% pillar3.data$bvdid)  %>%
                             labels = c("j = s","j = c", "j = f")))%>%
  ggplot(mapping = aes(x = reorder(name, RW.ranking, FUN = mean, na.rm=TRUE),
                       y = RW)) +
-geom_point(alpha = 0.5,size = 2) +
-  stat_summary(fun.y="mean", geom="bar",alpha = 0.3) +
+geom_point(alpha = 0.5,size = 1) +
+  stat_summary(fun.y="mean", geom="bar",alpha = 0.3, aes(width=0.6)) +
     labs(x=NULL) +
     coord_flip() +
   labs(y =  unname(TeX(c("$RW^{j}$" )))) +
   scale_fill_grey()+
     theme_bw() +
+  theme(text = element_text(size=8))+
   facet_wrap(~Portfolio)+
-  geom_text(data = RW_summary, aes(label = lab), x = 3, y = 0.85, size=3.5)
+  geom_text(data = RW_summary, aes(label = lab), x = 3, y = 0.85, size=2.5)
 
 ```
 
@@ -748,10 +765,10 @@ formulas <- lapply(formula.text, formula)
 
 # Run the models
 reg.list <- lapply(formulas, function(x) {
-  felm(x, data = filter(bank.data.win1, !is.na(log.CAR_gr)))
+   felm(x, data = filter(bank.data.win1, !is.na(log.CAR_gr)))
 })
 
-# Effect 
+# Effect
 effect.list  <-  lapply(reg.list, function(x){
   100*abs(x$coefficients)/abs(reg.list[[1]]$coefficients)
 })
@@ -1188,7 +1205,7 @@ stargazer(reg.list,
 ```{r}
 derivatives = "\\label{fig:derivatives} The figure plots risk-weights as a function of probability of default (top-left) and its first, second, and third derivative with respect to probability of default (top-right, bottom-left, and bottom-right, respectively)."
 ```
-```{r, fig.cap= derivatives, fig.align="center"}
+```{r derivatives, fig.cap= derivatives, fig.align="center", fig.width = 5}
 p1 <- ggdraw() + draw_image("../../Auxiliar/Pictures/function.jpg", scale = 0.9)
 p2 <- ggdraw() + draw_image("../../Auxiliar/Pictures/first_derivative.jpg", scale = 0.9)
 p3 <- ggdraw() + draw_image("../../Auxiliar/Pictures/second_derivative.jpg", scale = 0.9)
@@ -1201,7 +1218,7 @@ plot_grid(p1,p2,p3,p4, ncol = 2)
 densities = "\\label{fig:densities} The figure plots probability of default histograms by portfolio for all banks and years. The last bin contains all observations with PD higher or equal to 25%. Defaulted exposures are excluded."
 ```
 
-```{r, fig.height = 6, fig.width = 6, results="hide",fig.cap= densities, include=TRUE}
+```{r densities, fig.height = 5, fig.width = 5, results="hide",fig.cap= densities, include=TRUE}
 
 PD_summary <-  pillar3.data %>%
   select(name, PD, EAD, Portfolio_2, Portfolio_1) %>%
@@ -1235,7 +1252,7 @@ PD_summary <-  pillar3.data %>%
   theme(panel.grid.minor = element_blank())+
   scale_fill_grey() +
   facet_wrap(~ Portfolio) +
-  geom_text(data = PD_summary, aes(label = lab), x = 0.15, y = 150)
+  geom_text(data = PD_summary, aes(label = lab), x = 0.15, y = 150, size=2.5)
 
 
 ```
